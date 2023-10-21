@@ -96,8 +96,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         return '{}_web_1'.format(self._get_project_name())
 
     def _get_container_port(self):
-        cmd = 'docker-compose -f {} ps web --format json'.format(self._get_compose_file_path())
-        return json.loads(os.popen(cmd).read())[0]['Publishers'][0]['PublishedPort']
+        return os.popen('docker-compose -f {} port web 8000'.format(self._get_compose_file_path())).read().strip().split(':')[-1]
 
     def _get_compose_file_path(self, test=False):
         file_name = 'docker-compose.test.yml' if test else 'docker-compose.yml'
