@@ -338,6 +338,5 @@ if __name__ == "__main__":
             os.system('docker tag yml-api brenokcc/yml-api')
             os.system('docker login -u brenokcc -p {}'.format(os.environ.get('DOCKERHUB_PASSWORD')))
             os.system('docker push brenokcc/yml-api')
-    if len(sys.argv) == 3:
-        if sys.argv[1] == 'cloud' and sys.argv[2] == 'start':
+        elif sys.argv[1] == 'cloud':
             os.system('python3 {}'.format(os.path.join(path, 'cloud', 'server.py')))

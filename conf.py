@@ -4,8 +4,8 @@ TIME_ZONE = 'America/Recife'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = False
-STATIC_ROOT = '.deploy/static'
-MEDIA_ROOT = '.deploy/media'
+STATIC_ROOT = 'static'
+MEDIA_ROOT = 'media'
 SITE_URL = 'http://localhost:8000'
 
 DECIMAL_SEPARATOR = ','
