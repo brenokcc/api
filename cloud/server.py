@@ -96,7 +96,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         return '{}_web_1'.format(self._get_project_name())
 
     def _get_container_port(self):
-        return json.loads(os.popen('docker-compose ps web --format json').read())[0]['Publishers'][0]['PublishedPort']
+        cmd = 'docker-compose -f {} ps web --format json'.format(self._get_compose_file_path())
+        return json.loads(os.popen(cmd).read())[0]['Publishers'][0]['PublishedPort']
 
     def _get_compose_file_path(self, test=False):
         file_name = 'docker-compose.test.yml' if test else 'docker-compose.yml'
@@ -104,8 +105,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _get_nginx_project_conf(self):
         ssl = 'listen 443 ssl; ssl_certificate %s; ssl_certificate_key %s; if ($scheme = http) {return 301 https://$server_name$request_uri;}' % CERTIFICATE if CERTIFICATE else ''
-        static = ' '  or 'location /static { alias %s; }' % os.path.join(self._get_project_dir(), '.static')
-        media = 'location /media { alias %s; }' % os.path.join(self._get_project_dir(), '.docker', 'media')
+        static = ' '  or 'location /static { alias %s; }' % os.path.join(self._get_project_dir(), '.deploy', 'static')
+        media = 'location /media { alias %s; }' % os.path.join(self._get_project_dir(), '.deploy', 'media')
         return 'server {listen 80; server_name %s.%s; location / { proxy_pass http://127.0.0.1:%s; } %s %s %s }' % (
             self._get_project_name(), DOMAIN_NAME, self._get_container_port(), ssl, static, media
         )
