@@ -24,7 +24,7 @@ specification = API.instance()
 NONE = '__NONE__'
 
 MASKS = dict(
-    telefone='(99) 9999-9999',
+    telefone='(99) 99999-9999',
     cpf='999.999.999-99',
 )
 

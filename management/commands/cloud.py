@@ -3,14 +3,10 @@ import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-OPTIONS = 'deploy', 'update', 'backup', 'undeploy', 'destroy', 'test'
 
-if os.path.exists('/Users/breno'):
-    CLOUD_PROVIDER_API_URL = 'http://local.aplicativo.click/'
-    CLOUD_PROVIDER_API_TOKEN = '0123456789'
-else:
-    CLOUD_PROVIDER_API_URL = getattr(settings, 'CLOUD_PROVIDER_API_URL', 'https://cloud.aplicativo.click/')
-    CLOUD_PROVIDER_API_TOKEN = getattr(settings, 'CLOUD_PROVIDER_API_TOKEN', '')
+OPTIONS = 'deploy', 'update', 'backup', 'undeploy', 'destroy', 'test'
+CLOUD_PROVIDER_API_URL = getattr(settings, 'CLOUD_API_URL', 'https://cloud.aplicativo.click/')
+CLOUD_PROVIDER_API_TOKEN = getattr(settings, 'CLOUD_API_TOKEN', '0123456789')
 
 
 class Command(BaseCommand):
