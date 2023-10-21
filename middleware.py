@@ -28,7 +28,7 @@ class ReactJsMiddleware:
         is_json = request.META.get('HTTP_ACCEPT') == 'application/json'
 
         if is_api and not is_opt and not is_json:
-            url = "{}://{}".format(request.scheme, request.get_host())
+            url = "{}://{}".format(request.META.get('X-Forwarded-Proto', request.scheme), request.get_host())
             response = HttpResponse(INDEX_FILE_CONTENT.replace(
                 '<body>', f'<body><script>API_URL="{url}"</script>'
             ))

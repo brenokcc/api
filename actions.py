@@ -345,7 +345,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
         ) if isinstance(self, ActionView) else self.request.path
 
     def host_url(self):
-        return "{}://{}".format(self.request.scheme, self.request.get_host())
+        return "{}://{}".format(self.request.META.get('X-Forwarded-Proto', self.request.scheme), self.request.get_host())
 
     def to_response(self, key=None):
         from .serializers import serialize_value, serialize_fields
@@ -517,8 +517,7 @@ class Application(ActionView):
         theme = {k: '#{}'.format(v).strip() for k, v in specification.theme.items()}
         oauth = []
         for name, provider in specification.oauth.items():
-            base_url = "{}://{}".format(self.request.scheme, self.request.get_host())
-            redirect_uri = "{}{}".format(self.request.META.get('HTTP_ORIGIN', base_url), provider['redirect_uri'])
+            redirect_uri = "{}{}".format(self.request.META.get('HTTP_ORIGIN', self.host_url()), provider['redirect_uri'])
             authorize_url = '{}?response_type=code&client_id={}&redirect_uri={}'.format(
                 provider['authorize_url'], provider['client_id'], redirect_uri
             )
@@ -537,7 +536,7 @@ class Application(ActionView):
             oauth=oauth,
             index=index_url
         )
-        url = "{}://{}".format(self.request.scheme, self.request.get_host())
+        url = self.host_url()
         if data['icon'] and data['icon'].startswith('/'):
             data['icon'] = '{}{}'.format(url, data['icon'])
         if data['logo'] and data['logo'].startswith('/'):

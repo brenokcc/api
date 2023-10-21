@@ -7,6 +7,7 @@ USE_TZ = False
 STATIC_ROOT = 'static'
 MEDIA_ROOT = 'media'
 SITE_URL = 'http://localhost:8000'
+ALLOWED_HOSTS = ['*']
 
 DECIMAL_SEPARATOR = ','
 USE_THOUSAND_SEPARATOR = False

@@ -85,7 +85,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
         params = {k:v for k, v in self.request.query_params.items()}
         params.update(page=page)
         return "{}://{}{}?{}".format(
-            self.request.scheme, self.request.get_host(),
+            self.request.META.get('X-Forwarded-Proto', self.request.scheme), self.request.get_host(),
             self.request.path, '&'.join([f'{k}={v}' for k, v in params.items()])
         ) if page else None
 
