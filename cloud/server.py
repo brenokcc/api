@@ -106,7 +106,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         ssl = 'listen 443 ssl; ssl_certificate %s; ssl_certificate_key %s; if ($scheme = http) {return 301 https://$server_name$request_uri;}' % CERTIFICATE if CERTIFICATE else ''
         static = ' '  or 'location /static { alias %s; }' % os.path.join(self._get_project_dir(), '.deploy', 'static')
         media = 'location /media { alias %s; }' % os.path.join(self._get_project_dir(), '.deploy', 'media')
-        return 'server {listen 80; server_name %s.%s; location / { proxy_pass http://127.0.0.1:%s; } %s %s %s }' % (
+        return 'server {listen 80; server_name %s.%s; location / { proxy_pass http://127.0.0.1:%s; proxy_set_header X-Forwarded-Proto $scheme; proxy_set_header Host $host;} %s %s %s }' % (
             self._get_project_name(), DOMAIN_NAME, self._get_container_port(), ssl, static, media
         )
 
