@@ -1,0 +1,36 @@
+import os
+import requests
+from django.conf import settings
+from django.core.management.base import BaseCommand
+
+OPTIONS = 'deploy', 'update', 'backup', 'undeploy', 'destroy', 'test'
+
+if os.path.exists('/Users/breno'):
+    CLOUD_PROVIDER_API_URL = 'http://local.aplicativo.click/'
+    CLOUD_PROVIDER_API_TOKEN = '0123456789'
+else:
+    CLOUD_PROVIDER_API_URL = getattr(settings, 'CLOUD_PROVIDER_API_URL', 'https://cloud.aplicativo.click/')
+    CLOUD_PROVIDER_API_TOKEN = getattr(settings, 'CLOUD_PROVIDER_API_TOKEN', '')
+
+
+class Command(BaseCommand):
+    def add_arguments(self, parser):
+        for option in OPTIONS:
+            parser.add_argument('--{}'.format(option), nargs='*', help='Executes {}'.format(option))
+
+    def handle(self, *args, **options):
+        repository = open('.git/config').read().split('git@github.com:')[-1].split('.git')[0]
+        repository = os.popen('git config --get remote.origin.url').read().strip()
+        if repository.startswith('git@'):
+            # git@domain:x/y.git --> https://domain/x/y.git
+            repository = repository.replace(':', '/').replace('git@', 'https://')
+        print(CLOUD_PROVIDER_API_URL)
+        for action in OPTIONS:
+            if options[action] is not None:
+                break
+        if action:
+            data = dict(action=action, repository=repository, token=CLOUD_PROVIDER_API_TOKEN)
+            print('>>>', data)
+            response = requests.post(CLOUD_PROVIDER_API_URL, json=data)
+            print(response.text)
+            print('<<<', response.json())
