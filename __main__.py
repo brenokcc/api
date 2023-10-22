@@ -84,7 +84,7 @@ ENTRYPOINT ["python", "manage.py", "startserver", "{}"]
 FROM yml-api-test as test
 WORKDIR /opt/app
 ADD . .
-ENTRYPOINT ["python", "manage.py", "test"]
+ENTRYPOINT ["sh", "-c", "cp -r /opt/git .git && git pull origin $BRANCH && python manage.py test"]
 '''
 
 DOCKER_COMPOSE_FILE_CONTENT = '''version: '3.9'
@@ -146,7 +146,7 @@ services:
     command: redis-server --loglevel warning
     healthcheck:
       test: redis-server --version
-  test:
+  web:
     depends_on:
       redis:
         condition: service_healthy
@@ -154,6 +154,10 @@ services:
       context: .
       dockerfile: Dockerfile
       target: test
+    volumes:
+      - .git:/opt/git
+    environment:
+      BRANCH: ${TEST_BRANCH}
 '''
 
 DOCKER_IGNORE_FILE_CONTENT = '''.docker

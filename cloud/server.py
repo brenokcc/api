@@ -81,9 +81,11 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         execute('nginx -s reload')
         return 'OK'
 
-    def test(self):
+    def test(self, branch_name):
         self._get_code()
-        execute('docker-compose -f {} up --build --exit-code-from test'.format(self._get_compose_file_path(test=True)))
+        execute('export TEST_BRANCH={} && docker-compose -p {}_test -f {} up --build --exit-code-from web'.format(
+            branch_name, self._get_project_name(), self._get_compose_file_path(test=True))
+        )
         return 'OK'
 
     def _get_project_name(self):
@@ -141,7 +143,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             elif data.get('action') == 'destroy':
                 message = self.destroy()
             elif data.get('action') == 'test':
-                message = self.test()
+                message = self.test(data.get('branch'))
             else:
                 message = 'unknown action'
         else:

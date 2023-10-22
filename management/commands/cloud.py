@@ -26,6 +26,8 @@ class Command(BaseCommand):
                 break
         if action:
             data = dict(action=action, repository=repository, token=CLOUD_PROVIDER_API_TOKEN)
+            if action == 'test':
+                data.update(branch=os.open('git rev-parse --abbrev-ref HEAD').read().strip())
             print('>>>', data)
             response = requests.post(CLOUD_PROVIDER_API_URL, json=data)
             print(response.text)
