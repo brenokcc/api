@@ -76,9 +76,14 @@ a:hover, a:visited{
     border: 1px solid #ebebeb;
     border-radius: 4px;
     box-shadow: 0 10px 30px 0 rgba(0,0,0,.2);
-    width: 75%;
     overflow-x: auto;
     z-index: 9998;
+}
+.dialog.big{
+    width: 95%;
+}
+.dialog.small{
+    width: 75%;
 }
 .layer{
     background-color: black;
