@@ -14,6 +14,7 @@ class CorsMiddleware:
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Headers"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE, PATCH";
+        response["Access-Control-Max-Age"] = "600"
         return response
 
 

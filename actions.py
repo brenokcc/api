@@ -525,6 +525,15 @@ class Icons(ActionView):
     def has_permission(self):
         return True
 
+
+class Logout(ActionView):
+    def view(self):
+        self.redirect('/')
+
+    def has_permission(self):
+        return True
+
+
 class Manifest(ActionView):
 
     def view(self):
