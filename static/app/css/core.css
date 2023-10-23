@@ -880,7 +880,10 @@ select {color: #757575;}
 .form .form-group .help_text{
     font-style: italic;
 }
-.form .form-control{width: 100%;}
+.form .form-control{
+    width: 100%;
+    -webkit-min-logical-width: calc(100% - 12px);
+}
 .form .autocomplete{width: 100%;}
 .form .subactions{
     text-align:center;
