@@ -377,7 +377,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
             values = {}
             for k, v in self.request.POST.items():
                 if k in self.fields and v!='':
-                    values[k] = self.fields[k].to_internal_value(v)
+                    values[k] = self.get_internal_value(k, v)
             getattr(self, f'on_{on_change}_change')(**values)
             return Response(self.controls)
         only = self.request.query_params.get('only')
