@@ -23,6 +23,7 @@ from .specification import API
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.cache import cache
 from django.conf import settings
+from django.http import HttpResponse
 from django.db.models import QuerySet
 
 
@@ -415,6 +416,8 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
             if not self.fields or self.is_valid():
                 try:
                     result = self.get_result()
+                    if isinstance(result, HttpResponse):
+                        return result
                 except JsonResponseReadyException as e:
                     return Response(e.data)
                 except Exception as e:
@@ -518,6 +521,29 @@ class Icons(ActionView):
 
     def view(self):
         return dict(type='icons', icons=ICONS)
+
+    def has_permission(self):
+        return True
+
+class Manifest(ActionView):
+
+    def view(self):
+        specification = API.instance()
+        return Response(
+            {
+                "name": specification.title,
+                "short_name": specification.title,
+                "lang": 'pt-BR',
+                "start_url": "/api/v1/index/",
+                "scope": "/",
+                "display": "standalone",
+                "icons": [{
+                    "src": '{}{}'.format(self.host_url(), specification.icon),
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }]
+            }
+        )
 
     def has_permission(self):
         return True

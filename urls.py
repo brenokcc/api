@@ -2,7 +2,7 @@ import os
 from django.conf import settings
 from rest_framework import permissions, urls
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework.authtoken import views
@@ -28,7 +28,7 @@ schema_view = get_schema_view(
 urlpatterns = [
     path('api/doc/', schema_view.with_ui('swagger', cache_timeout=0)),
     path('', RedirectView.as_view(url='/api/v1/login/', permanent=False)),
-    path('api/v1/', include(router.urls)),
+    re_path(r"^(api/v1/|api/)", include(router.urls)),
     path('api/v1/token/', ObtainAuthToken.as_view()),
     path('api/v1/login/', ObtainAuthToken.as_view()),
 ] + static('/media/', document_root=settings.MEDIA_ROOT) \
