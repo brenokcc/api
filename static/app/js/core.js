@@ -29,6 +29,7 @@ function request(method, url, callback, data){
         }
     ).then(
         text => {
+            console.log(httpResponse.headers.get('Content-Type'));
             var data = JSON.parse(text||'{}');
             if(data.redirect) document.location.href = data.redirect;
             callback(data, httpResponse);
