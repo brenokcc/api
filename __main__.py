@@ -75,7 +75,7 @@ jobs:
 
 '''
 
-DOCKER_FILE_CONTENT = '''FROM yml-api
+DOCKER_FILE_CONTENT = '''FROM yml-api as web
 WORKDIR /opt/app
 EXPOSE 8000
 ADD . .
@@ -96,9 +96,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: web
     restart: always
     volumes:
-      - .docker/media:/opt/app/media
+      - .deploy/media:/opt/app/media
       - ./static:/opt/app/static
     depends_on:
       postgres:
@@ -115,7 +116,7 @@ services:
       - "6379"
     command: redis-server --loglevel warning
     volumes:
-      - .docker/redis:/data
+      - .deploy/redis:/data
   postgres:
     image: postgres
     hostname: postgres
@@ -125,7 +126,7 @@ services:
     ports:
       - "5432"
     volumes:
-      - .docker/postgres:/var/lib/postgresql/data
+      - .deploy/postgres:/var/lib/postgresql/data
     healthcheck:
       test: psql -U postgres -d $$POSTGRES_DB -c "SELECT version();"
   weasyprint:
@@ -235,12 +236,8 @@ API_YML = '''api:
         add:
           fields: first_name, last_name, username
         list:
-          fields: id, dados_gerais, dados_acesso
+          fields: id, username, api.actions.userroles
           actions: add, view, edit, delete, api.actions.changepassword, api.actions.changepasswords
-          extends:
-            active:
-              fields: id, username
-            inactive:
         view:
           fields: id, dados_gerais, dados_acesso, api.actions.userroles
           actions: api.actions.verifypassword, api.actions.changepassword

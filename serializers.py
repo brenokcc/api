@@ -139,7 +139,10 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
         return str(value).replace('.', ',')
     elif isinstance(value, dict) or isinstance(value, list):
         if type(value) == Link and value['url'].startswith('/media'):
-            host_url = 'http://localhost:8000'
+            request = context['request']
+            host_url = "{}://{}".format(
+                request.META.get('X-Forwarded-Proto', request.scheme), request.get_host()
+            )
             value['url'] = '{}{}'.format(host_url, value['url'])
         return value
     if isinstance(value, models.QuerySet) and value._iterable_class != ModelIterable:
