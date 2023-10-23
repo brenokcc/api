@@ -858,6 +858,7 @@ select {color: #757575;}
 }
 .filter.big > div, .filter.big .form-control, .filter.big .autocomplete, .filter.big .btn{
     width: 100%;
+    -webkit-min-logical-width: calc(100% - 12px);
 }
 .filter > div{
     margin-right: 10px;
