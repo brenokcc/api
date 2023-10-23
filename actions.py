@@ -558,6 +558,7 @@ class Application(ActionView):
             i18n = yaml.safe_load(file)
         specification = API.instance()
         index_url = '/api/v1/index/' if specification.index else '/api/v1/login/'
+        manifest_url = '{}{}'.format(self.host_url(), '/api/manifest/')
         nocolor = 'radius',
         theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in specification.theme.items()}
         oauth = []
@@ -579,7 +580,8 @@ class Application(ActionView):
             i18n=i18n,
             menu=[],
             oauth=oauth,
-            index=index_url
+            index=index_url,
+            manifest=manifest_url,
         )
         url = self.host_url()
         if data['icon'] and data['icon'].startswith('/'):
