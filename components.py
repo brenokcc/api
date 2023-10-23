@@ -2,10 +2,11 @@ from django.template.loader import render_to_string
 
 
 class Link(dict):
-    def __init__(self, url, target='_blank'):
+    def __init__(self, url, target='_blank', icon=None):
         self['type'] = 'link'
         self['url'] = url
         self['target'] = target
+        self['icon'] = icon
 
 
 class QrCode(dict):

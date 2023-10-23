@@ -6,6 +6,7 @@ USE_L10N = True
 USE_TZ = False
 STATIC_ROOT = 'static'
 MEDIA_ROOT = 'media'
+MEDIA_URL = 'media/'
 SITE_URL = 'http://localhost:8000'
 ALLOWED_HOSTS = ['*']
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

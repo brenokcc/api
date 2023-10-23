@@ -9,10 +9,11 @@ from django.db.models.query import ModelIterable
 from django.db.models.fields.files import FieldFile
 from rest_framework import serializers
 from rest_framework.relations import MANY_RELATION_KWARGS
-from rest_framework.serializers import RelatedField, ManyRelatedField, ChoiceField, ModelSerializer
+from rest_framework.serializers import RelatedField, ManyRelatedField, ChoiceField, MultipleChoiceField, ModelSerializer
 
 from . import ValueSet
 from . import permissions
+from .components import Link
 from .utils import to_snake_case, to_choices
 from .actions import ACTIONS, actions_metadata, TextField
 from .pagination import PageNumberPagination, PaginableManyRelatedField
@@ -40,7 +41,15 @@ def serialize_fields(serializer, fieldsets=None):
                 extra.update(mask=v)
                 break
 
-        if isinstance(field, ChoiceField):
+        if isinstance(field, MultipleChoiceField):
+            field_type = 'select'
+            extra.update(multiple=True)
+            choices = [dict(id=k, text=v) for k, v in field.choices.items()]
+            extra.update(choices=choices)
+            value = [choice for choice in choices if choice['id'] in (field.initial or ())]
+            if (getattr(field, 'pick', False)):
+                extra.update(pick=True)
+        elif isinstance(field, ChoiceField):
             field_type = 'select'
             extra.update(multiple=False)
             value = getattr(instance, name) if instance else field.initial
@@ -129,6 +138,9 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
     if isinstance(value, decimal.Decimal) or isinstance(value, float):
         return str(value).replace('.', ',')
     elif isinstance(value, dict) or isinstance(value, list):
+        if type(value) == Link and value['url'].startswith('/media'):
+            host_url = 'http://localhost:8000'
+            value['url'] = '{}{}'.format(host_url, value['url'])
         return value
     if isinstance(value, models.QuerySet) and value._iterable_class != ModelIterable:
         return value
@@ -368,7 +380,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
     def build_standard_field(self, field_name, model_field):
         method_name = 'get_{}'.format(field_name)
-        if method_name in self.item.view_methods:
+        if method_name in self.item.view_methods and self.context['view'].action not in ('create', 'update'):
             field_cls, field_kwargs = MethodField, dict(source='*', method_name=method_name)
         else:
             field_cls, field_kwargs = super().build_standard_field(field_name, model_field)

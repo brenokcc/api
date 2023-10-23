@@ -35,6 +35,7 @@ DateField = serializers.DateField
 FileField = serializers.FileField
 DecimalField = serializers.DecimalField
 EmailField = serializers.EmailField
+ManyRelatedField = serializers.ManyRelatedField
 
 
 class TextField(serializers.CharField):
@@ -45,6 +46,13 @@ serializers.ModelSerializer.serializer_field_mapping[models.TextField] = TextFie
 
 
 class ChoiceField(serializers.ChoiceField):
+
+    def __init__(self, *args, **kwargs):
+        self.pick = kwargs.pop('pick', False)
+        super().__init__(*args, **kwargs)
+
+
+class MultipleChoiceField(serializers.MultipleChoiceField):
 
     def __init__(self, *args, **kwargs):
         self.pick = kwargs.pop('pick', False)
@@ -214,11 +222,19 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
 
     def get(self, name, default=None):
         value = None
-        if name in self.request.GET:
-            value = self.request.GET[name]
-        elif name in self.request.POST:
-            value = self.request.POST[name]
+        if name in self.fields and (isinstance(self.fields[name], MultipleChoiceField) or (isinstance(self.fields[name], ManyRelatedField))):
+            if name in self.request.GET:
+                value = self.request.GET.getlist(name)
+            elif name in self.request.POST:
+                value = self.request.POST.getlist(name)
+        else:
+            if name in self.request.GET:
+                value = self.request.GET[name]
+            elif name in self.request.POST:
+                value = self.request.POST[name]
+        return self.get_internal_value(name, value, default=default)
 
+    def get_internal_value(self, name, value, default=None):
         if value is None:
             return default
         else:
@@ -304,6 +320,8 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
         return apply_lookups(queryset, lookups, self.user)
 
     def requires(self, *role_names, **scopes):
+        if self.user.is_superuser:
+            return True
         if scopes:
             for name in role_names:
                 if check_lookups(self.instance, {name: scopes}, self.user, False):
@@ -514,7 +532,8 @@ class Application(ActionView):
             i18n = yaml.safe_load(file)
         specification = API.instance()
         index_url = '/api/v1/index/' if specification.index else '/api/v1/login/'
-        theme = {k: '#{}'.format(v).strip() for k, v in specification.theme.items()}
+        nocolor = 'radius',
+        theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in specification.theme.items()}
         oauth = []
         for name, provider in specification.oauth.items():
             redirect_uri = "{}{}".format(self.request.META.get('HTTP_ORIGIN', self.host_url()), provider['redirect_uri'])
@@ -612,6 +631,9 @@ class ChangePassword(UserAction):
             return {'token': token.key, 'user': user}
         else:
             self.notify('Senha alterada com sucesso')
+
+    def has_permission(self):
+        return self.user.is_superuser or self.user == self.instance
 
 
 class ChangePasswords(BatchAction):

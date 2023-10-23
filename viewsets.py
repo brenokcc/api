@@ -7,6 +7,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.db.models.signals import m2m_changed, post_save, post_delete
 from django.utils.autoreload import autoreload_started
 from django.core.cache import cache
@@ -378,9 +379,12 @@ class ModelViewSet(viewsets.ModelViewSet):
     @swagger_auto_schema(manual_parameters=[choices_field, choices_search])
     def create(self, request, *args, **kwargs):
         permissions.check_roles(self.item.add_lookups, request.user)
-        return self.choices_response(request) or self.create_form(request) or self.post_create(
-            super().create(request, *args, **kwargs)
-        )
+        try:
+            return self.choices_response(request) or self.create_form(request) or self.post_create(
+                super().create(request, *args, **kwargs)
+            )
+        except ValidationError as e:
+            return Response(dict(non_field_errors=e.message), status=status.HTTP_400_BAD_REQUEST)
 
     def post_create(self, response):
         response = Response({}) if specification.app else response
