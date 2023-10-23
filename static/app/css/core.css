@@ -383,6 +383,9 @@ a:hover, a:visited{
     border-radius: 10px;
     text-align: left;
 }
+.header .left{
+    max-width:75%;
+}
 .header .right .dropdown a{
     text-decoration: none;
 }
@@ -853,7 +856,7 @@ select {color: #757575;}
 .filter.small > div{
     width: 255px;
 }
-.filter.big > div, .filter.big .form-control, .filter.big .autocomplete{
+.filter.big > div, .filter.big .form-control, .filter.big .autocomplete, .filter.big .btn{
     width: 100%;
 }
 .filter > div{
