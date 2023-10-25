@@ -77,12 +77,12 @@ def actions_metadata(source, actions, context, base_url, instances=(), viewer=No
         name = cls.get_api_name()
         icon = cls.metadata('icon')
         serializer = cls(context=context, instance=source)
-        if issubclass(cls, BatchAction):
+        if cls.get_target() == 'instances':
             ids = []
             target = 'instances'
             url = f'{base_url}{name}/'
             append = serializer.has_permission()
-        elif issubclass(cls, QuerySetAction):
+        elif cls.get_target() == 'queryset':
             ids = []
             target = 'queryset'
             url = f'{base_url}{name}/'
@@ -120,7 +120,7 @@ class UserCache(object):
         return cache.delete(self.key(k))
 
 
-class ActionMetaclass(serializers.SerializerMetaclass):
+class EnpointMetaclass(serializers.SerializerMetaclass):
     def __new__(mcs, name, bases, attrs):
         meta = attrs.get('Meta')
         if meta:
@@ -140,7 +140,7 @@ class ActionMetaclass(serializers.SerializerMetaclass):
         return cls
 
 
-class Action(serializers.Serializer, metaclass=ActionMetaclass):
+class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
     permission_classes = AllowAny,
 
     class Meta:
@@ -149,6 +149,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
         modal = True
         sync = True
         fieldsets = {}
+        target = None
 
     def __init__(self, *args, **kwargs):
         self.user_task = None
@@ -169,6 +170,10 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
                 data = request.GET or request.data or None
 
         super().__init__(data=data, *args, **kwargs)
+
+    @classmethod
+    def get_target(cls):
+        return cls.metadata('target', None)
 
     @classmethod
     def get_name(cls):
@@ -196,7 +201,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
 
     @classmethod
     def is_action_view(cls):
-        return cls.view != Action.view
+        return cls.get != Endpoint.get
 
     def get_help_text(self):
         return self.metadata('help_text')
@@ -224,7 +229,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
     def show(self, *names):
         self.controls['show'].extend(names)
 
-    def get(self, name, default=None):
+    def getdata(self, name, default=None):
         value = None
         if name in self.fields and (isinstance(self.fields[name], MultipleChoiceField) or (isinstance(self.fields[name], ManyRelatedField))):
             if name in self.request.GET:
@@ -276,7 +281,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
                 setattr(self.instance, k, v)
         return is_valid
 
-    def submit(self):
+    def post(self):
         if hasattr(self, 'save'):
             if isinstance(self, serializers.ModelSerializer):
                 self.instance.save()
@@ -342,7 +347,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
         key = '{}.{}'.format(self.context['request'].user.id, type(self).__name__)
         return cache.has_key(key)
 
-    def view(self):
+    def get(self):
         return None
     
     def get_result(self):
@@ -350,10 +355,10 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
             ley = '{}.{}'.format(self.context['request'].user.id, type(self).__name__)
             value = cache.get(ley)
             if value is None:
-                value = self.view() if self.is_action_view() else self.submit()
+                value = self.get() if self.is_action_view() else self.post()
                 cache.set(ley, value)
         else:
-            value = self.view() if self.is_action_view() else self.submit()
+            value = self.get() if self.is_action_view() else self.post()
         return value
 
     @classmethod
@@ -366,7 +371,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
     def get_url(self):
         return '/api/v1/{}/'.format(
             to_snake_case(type(self).__name__)
-        ) if isinstance(self, ActionView) else self.request.path
+        ) if self.get_target() is None else self.request.path
 
     def host_url(self):
         return "{}://{}".format(self.request.META.get('X-Forwarded-Proto', self.request.scheme), self.request.get_host())
@@ -458,27 +463,15 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
                 return Response(self.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class ActionView(Action):
-    pass
+class EndpointSet(Endpoint):
+    endpoints = []
 
-class UserAction(Action):
-    pass
-
-class BatchAction(Action):
-    modal = True
-
-class QuerySetAction(Action):
-    modal = True
-
-class ActionSet(ActionView):
-    actions = []
-
-    def view(self):
+    def get(self):
         from .serializers import serialize_value
         result = {}
         path = self.request.path
         only = self.request.GET.get('only')
-        for cls in self.actions:
+        for cls in self.endpoints:
             cls = ACTIONS[cls] if isinstance(cls, str) else cls
             self.request.path = '/api/v1/{}/'.format(cls.get_api_name())
             action = cls(context=self.context, instance=self.request.user)
@@ -493,12 +486,12 @@ class ActionSet(ActionView):
         return result
 
 
-class Shortcuts(ActionView):
+class Shortcuts(Endpoint):
 
     class Meta:
         api_tag = 'api'
 
-    def view(self):
+    def get(self):
         boxes = Boxes('Acesso Rápido')
         specification = API.instance()
         for k, item in specification.items.items():
@@ -510,8 +503,8 @@ class Shortcuts(ActionView):
     def has_permission(self):
         return self.instance.is_authenticated
 
-class Dashboard(ActionSet):
-    actions = Shortcuts,
+class Dashboard(EndpointSet):
+    endpoints = Shortcuts,
 
     class Meta:
         api_tag = 'api'
@@ -520,28 +513,28 @@ class Dashboard(ActionSet):
         return self.user.is_authenticated
 
 
-class Icons(ActionView):
+class Icons(Endpoint):
     class Meta:
         api_tag = 'api'
 
-    def view(self):
+    def get(self):
         return dict(type='icons', icons=ICONS)
 
     def has_permission(self):
         return True
 
 
-class Logout(ActionView):
-    def view(self):
+class Logout(Endpoint):
+    def get(self):
         self.redirect('/')
 
     def has_permission(self):
         return True
 
 
-class Manifest(ActionView):
+class Manifest(Endpoint):
 
-    def view(self):
+    def get(self):
         specification = API.instance()
         return Response(
             {
@@ -562,12 +555,12 @@ class Manifest(ActionView):
     def has_permission(self):
         return True
 
-class Application(ActionView):
+class Application(Endpoint):
 
     class Meta:
         api_tag = 'api'
 
-    def view(self):
+    def get(self):
         with open(os.path.join(settings.BASE_DIR, 'i18n.yml')) as file:
             i18n = yaml.safe_load(file)
         specification = API.instance()
@@ -608,19 +601,19 @@ class Application(ActionView):
         return True
 
 
-class UserRoles(Action):
+class UserRoles(Endpoint):
 
     @classmethod
     def get_api_name(cls):
         return 'user_roles'
 
-    def view(self):
+    def get(self):
         return [str(role) for role in Role.objects.filter(username=self.instance.username).order_by('id')]
 
 
-class ActivateRole(Action):
+class ActivateRole(Endpoint):
 
-    def submit(self):
+    def post(self):
         qs = self.objects('api.role').filter(username=self.instance.username)
         qs.update(active=False)
         qs.filter(id=self.instance.id).update(active=True)
@@ -631,13 +624,16 @@ class ActivateRole(Action):
         return self.user.is_superuser or self.user.username == self.instance.username
 
 
-class UserResources(UserAction):
+class UserResources(Endpoint):
+
+    class Meta:
+        target = 'user'
 
     @classmethod
     def get_api_name(cls):
         return 'resources'
 
-    def view(self):
+    def get(self):
         from .viewsets import specification
         q = self.request.GET.get('choices_search')
         resources = []
@@ -654,16 +650,17 @@ class UserResources(UserAction):
         return self.user.is_authenticated
 
 
-class ChangePassword(UserAction):
+class ChangePassword(Endpoint):
 
     senha = serializers.CharField(label='Senha')
 
     class Meta:
         icon = 'user-shield'
         display = 'last_login',
+        target = 'user'
 
-    def submit(self):
-        self.instance.set_password(self.get('senha'))
+    def post(self):
+        self.instance.set_password(self.getdata('senha'))
         self.instance.save()
         if self.instance == self.request.user:
             token = Token.objects.get_or_create(user=self.user)[0]
@@ -676,33 +673,37 @@ class ChangePassword(UserAction):
         return self.user.is_superuser or self.user == self.instance
 
 
-class ChangePasswords(BatchAction):
+class ChangePasswords(Endpoint):
 
     senha = serializers.CharField(label='Senha')
 
     class Meta:
         icon = 'user-shield'
+        target = 'instances'
 
-    def submit(self):
+    def post(self):
         for user in self.instance.all():
             user.set_password(self.data['senha'])
             user.save()
 
 
-class VerifyPassword(UserAction):
+class VerifyPassword(Endpoint):
     senha = serializers.CharField(label='Senha')
 
-    def submit(self):
+    class Meta:
+        target = 'user'
+
+    def post(self):
         return self.notify(self.instance.check_password(self.data['senha']))
 
     def has_permission(self):
         return True
 
 
-class TaskProgress(ActionView):
+class TaskProgress(Endpoint):
     class Meta:
         api_tag = 'api'
 
-    def view(self):
+    def get(self):
         value = cache.get(self.request.GET.get('key'), 0)
         return value

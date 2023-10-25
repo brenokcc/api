@@ -29,10 +29,22 @@ function request(method, url, callback, data){
         }
     ).then(
         text => {
-            //console.log(httpResponse.headers.get('Content-Type'));
-            var data = JSON.parse(text||'{}');
-            if(data.redirect) document.location.href = data.redirect;
-            callback(data, httpResponse);
+            if(httpResponse.headers.get('Content-Type')=='application/json'){
+                var data = JSON.parse(text||'{}');
+                if(data.token){
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', data.user.username);
+                }
+                if(data.redirect){
+                    if(data.message) setCookie('message', data.message);
+                    document.location.href = data.redirect;
+                } else {
+                    if(data.message && !data.task)  showMessage(data.message);
+                    callback(data, httpResponse);
+                }
+            } else {
+                callback(text, httpResponse);
+            }
         }
     );
 }
@@ -56,12 +68,6 @@ function initialize(element){
         showMessage(message);
         setCookie('message', null);
     }
-    $(element).find("a.modal").each( function(i, link) {
-        link.addEventListener("click", function(){
-            event.preventDefault();
-            openDialog(link.href);
-        });
-    });
     $(element).find("input[type=file]").each(function(i, input) {
         input.addEventListener('change', function (e) {
             if (e.target.files) {
@@ -136,9 +142,7 @@ function setInnerHTML(elm, html) {
       oldScriptEl.parentNode.replaceChild(newScriptEl, oldScriptEl);
   });
 }
-function displayLayer(display){
-    document.querySelector('.layer').style.display = display;
-}
+
 function setCookie(cname, cvalue, exdays) {
   const d = new Date();
   if(cvalue==null) exdays = 0;
@@ -176,82 +180,3 @@ function showMessage(text, style){
     feedback.style.display='block';
     setTimeout(function(){feedback.style.display='none';}, 5000);
 }
-
-function showTask(key, callback){
-    fetch('/api/v1/task_progress/?key='+key).then(
-        function(response){
-            response.text().then(
-                function(text){
-                    var btn = document.querySelector(".btn.submit")
-                    btn.innerHTML = "Aguarde... ("+text+"%)";
-                    if(text == "100"){
-                        callback();
-                    } else if(text != ""){
-                        setTimeout(function(){showTask(key, callback)}, 3000)
-                    }
-                }
-            )
-        }
-    );
-}
-
-function formHide(id){
-    if(id){
-        var fieldset = document.querySelector(".form-fieldset."+id);
-        if(fieldset) fieldset.style.display = 'none';
-        var field = document.querySelector(".form-group."+id);
-        if(field) field.style.display = 'none';
-    }
-}
-function formShow(id){
-    if(id){
-        var fieldset = document.querySelector(".form-fieldset."+id);
-        if(fieldset) fieldset.style.display = 'block';
-        var field = document.querySelector(".form-group."+id);
-        if(field) field.style.display = 'block';
-    }
-}
-function formValue(id, value){
-    var group = document.querySelector(".form-group."+id);
-    var widget = group.querySelector('*[name="'+id+'"]');
-    if(widget.tagName == "INPUT"){
-        widget.value = value;
-    } else {
-        if(widget.tagName == "SELECT"){
-            if(widget.style.display=="none"){
-                setAcValue(widget.id, value.id, value.text);
-            } else {
-                for (var i = 0; i < widget.options.length; i++) {
-                    if (widget.options[i].value == value) {
-                        widget.selectedIndex = i;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-function formControl(controls){
-    if(controls){
-        for (var i = 0; i < controls.hide.length; i++) formHide(controls.hide[i]);
-        for (var i = 0; i < controls.show.length; i++) formShow(controls.show[i]);
-        for (var k in controls.set) formValue(k, controls.set[k]);
-    }
-}
-function formWatch(watch){
-    if(watch){
-        for (var i = 0; i < watch.length; i++){
-            var id = watch[i];
-            var group = document.querySelector(".form-group."+id);
-            var widgets = group.querySelectorAll('*[name="'+id+'"]');
-            widgets.forEach(function( widget ) {
-                widget.addEventListener("change", function (e) {
-                    var form = widget.closest('form');
-                    var data = new FormData(form);
-                    request('POST', form.action+'?on_change='+this.name, formControl, data);
-                });
-            });
-        }
-    }
-}
-

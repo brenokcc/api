@@ -5,7 +5,7 @@ from rest_framework import pagination
 from rest_framework import relations
 from . import permissions
 from .specification import API
-from .actions import actions_metadata
+from .endpoints import actions_metadata
 from .utils import to_snake_case, to_choices, to_calendar
 from .exceptions import JsonResponseReadyException
 

@@ -15,7 +15,7 @@ from . import ValueSet
 from . import permissions
 from .components import Link
 from .utils import to_snake_case, to_choices
-from .actions import ACTIONS, actions_metadata, TextField
+from .endpoints import ACTIONS, actions_metadata, TextField
 from .pagination import PageNumberPagination, PaginableManyRelatedField
 from .specification import API
 from .exceptions import JsonResponseReadyException
@@ -275,13 +275,13 @@ class ActionField(serializers.DictField):
 
     def check_choices_response(self):
         if self.field_name == self.context['request'].GET.get('only'):
-            choices = to_choices(self.serializer_class().view(), self.context['request'])
+            choices = to_choices(self.serializer_class().get(), self.context['request'])
             if choices:
                 raise JsonResponseReadyException(choices)
 
     def to_representation(self, value):
         serializer = self.serializer_class(context=self.context, instance=value)
-        result = serializer.view()
+        result = serializer.get()
         model = type(value)
         key = '{}.{}'.format(model._meta.app_label, model._meta.model_name)
         item = specification.items.get(key)

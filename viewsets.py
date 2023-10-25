@@ -30,7 +30,7 @@ from rest_framework.response import Response
 from . import permissions
 from . import signals
 from .models import Role
-from .actions import ACTIONS, Action, BatchAction, QuerySetAction, ActionView, ActionSet, UserAction
+from .endpoints import ACTIONS, Endpoint, EndpointSet
 from .serializers import *
 from .specification import API
 from .utils import to_snake_case, related_model, as_choices, to_choices
@@ -191,7 +191,10 @@ class FilterBackend(filters.BaseFilterBackend):
         return queryset.contextualize(request, dict(filters=filters, search=search))
 
 
-class List(QuerySetAction):
+class List(Endpoint):
+
+    class Meta:
+        target = 'queryset'
 
     @classmethod
     def get_qualified_name(cls):
@@ -201,9 +204,10 @@ class List(QuerySetAction):
         return super().has_permission() or permissions.check_roles(self.context['view'].item.list_lookups, self.user, False)
 
 
-class Add(QuerySetAction):
+class Add(Endpoint):
     class Meta:
         icon = 'plus'
+        target = 'queryset'
 
     @classmethod
     def get_qualified_name(cls):
@@ -213,7 +217,7 @@ class Add(QuerySetAction):
         return super().has_permission() or permissions.check_roles(self.context['view'].item.add_lookups, self.user, False)
 
 
-class Edit(Action):
+class Edit(Endpoint):
 
     class Meta:
         icon = 'pencil'
@@ -226,7 +230,7 @@ class Edit(Action):
         return super().has_permission() or permissions.check_roles(self.context['view'].item.edit_lookups, self.user, False)
 
 
-class Delete(Action):
+class Delete(Endpoint):
 
     class Meta:
         icon = 'trash'
@@ -239,7 +243,7 @@ class Delete(Action):
         return super().has_permission() or permissions.check_roles(self.context['view'].item.delete_lookups, self.user, False)
 
 
-class View(Action):
+class View(Endpoint):
 
     class Meta:
         icon = 'eye'
@@ -494,7 +498,7 @@ class UserViewSet(viewsets.GenericViewSet):
     @classmethod
     def create_actions(cls):
         for serializer_cls in ACTIONS.values():
-            if issubclass(serializer_cls, UserAction) and serializer_cls != UserAction:
+            if serializer_cls.get_target() == 'user':
                 k = serializer_cls.get_api_name()
                 methods = serializer_cls.get_api_methods()
                 manual_parameters = [choices_field, choices_search] if serializer_cls._declared_fields else []
@@ -520,7 +524,7 @@ class ActionViewSet(viewsets.GenericViewSet):
     @classmethod
     def create_actions(cls):
         for action_class in ACTIONS.values():
-             if issubclass(action_class, ActionView) and action_class not in (ActionView, ActionSet):
+             if action_class.get_target() is None:
                 k = action_class.get_api_name()
                 methods = action_class.get_api_methods()
                 manual_parameters = [choices_field, choices_search] if 'post' in methods else []
@@ -580,9 +584,9 @@ def model_view_set_factory(model_name):
         method = 'post' if cls._declared_fields else 'get'
         methods = ['post', 'get'] if specification.app else [method]
         manual_parameters = [only_fields, choices_field, choices_search]
-        if issubclass(cls, BatchAction) or issubclass(cls, QuerySetAction):
+        if cls.get_target() == 'instances' or cls.get_target() == 'queryset':
             detail = False
-            if issubclass(cls, BatchAction):
+            if cls.get_target() == 'instances':
                 url_path = f'{k}/(?P<ids>[0-9,]+)'
                 manual_parameters.append(ids_parameter)
         else:
@@ -604,7 +608,7 @@ def model_view_set_factory(model_name):
         for qualified_name in item.relations[k].get('actions'):
             if qualified_name in ('add', 'view', 'edit', 'delete', 'list'): continue
             cls2 = ACTIONS[qualified_name]
-            if issubclass(cls2, QuerySetAction):
+            if cls2.get_target() == 'queryset':
                 k2 = cls2.get_qualified_name()
                 method = 'post' if cls2._declared_fields else 'get'
                 methods = ['post', 'get'] if specification.app else [method]
@@ -692,9 +696,9 @@ specification = API.instance()
 for app_label in settings.INSTALLED_APPS:
     try:
         if app_label != 'api':
-            __import__('{}.{}'.format(app_label, 'actions'), fromlist=app_label.split('.'))
+            __import__('{}.{}'.format(app_label, 'endpoints'), fromlist=app_label.split('.'))
     except ImportError as e:
-        if not e.name.endswith('actions'):
+        if not e.name.endswith('endpoints'):
             raise e
     except BaseException as e:
         raise e

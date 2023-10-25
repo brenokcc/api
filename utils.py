@@ -14,12 +14,12 @@ def as_choices(qs, limit=20):
 
 
 def to_choices(queryset, request, relation_name=None, limit_choices=True):
-    from .actions import ACTIONS
+    from .endpoints import ACTIONS
     field_name = request.query_params.get('choices_field')
     if field_name:
         if relation_name:
             if '.' in relation_name:
-                queryset = ACTIONS[relation_name](context=dict(request=request)).view()
+                queryset = ACTIONS[relation_name](context=dict(request=request)).get()
             elif relation_name.startswith('get_'):
                 queryset = getattr(queryset.first(), relation_name)()
             else:

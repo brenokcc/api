@@ -13,7 +13,7 @@ urlpatterns = [
 MODELS_FILE_CONTENT = '''from django.db import models
 '''
 
-ACTIONS_FILE_CONTENT = '''from api import actions
+ACTIONS_FILE_CONTENT = '''from api import endpoints
 '''
 
 TASKS_FILE_CONTENT = '''from api.tasks import Task
@@ -224,13 +224,13 @@ API_YML = '''api:
       search: username
       filters: date_joined__gte, is_superuser, username
       ordering: username
-      actions: list, add, view, edit, delete, api.actions.changepassword, api.actions.changepasswords, api.actions.verifypassword
+      actions: list, add, view, edit, delete, api.endpoints.changepassword, api.endpoints.changepasswords, api.endpoints.verifypassword
       fieldsets:
         dados_gerais: username, first_name, last_name, get_full_name
         dados_acesso: date_joined, is_staff, is_active
         contato: email
       relations:
-        api.actions.userroles:
+        api.endpoints.userroles:
           fields: id, name, scope, model, value, active
           actions: view
       endpoints:
@@ -239,11 +239,11 @@ API_YML = '''api:
         edit:
           fields: first_name, last_name, username, email, is_superuser
         list:
-          fields: id, username, api.actions.userroles
-          actions: add, view, edit, delete, api.actions.changepassword, api.actions.changepasswords
+          fields: id, username, api.endpoints.userroles
+          actions: add, view, edit, delete, api.endpoints.changepassword, api.endpoints.changepasswords
         view:
-          fields: id, dados_gerais, dados_acesso, api.actions.userroles
-          actions: api.actions.verifypassword, api.actions.changepassword
+          fields: id, dados_gerais, dados_acesso, api.endpoints.userroles
+          actions: api.endpoints.verifypassword, api.endpoints.changepassword
     api.role:
       prefix: roles
       endpoints:
