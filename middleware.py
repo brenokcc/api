@@ -47,10 +47,11 @@ class ReactJsMiddleware:
             return HttpResponseRedirect(ReactJsMiddleware.ICON_URL)
 
         is_opt = request.method == 'OPTIONS'
-        is_api = request.path.startswith('/api/v1/')
+        is_api = request.path == '/' or request.path.startswith('/api/v1/')
         is_json = request.META.get('HTTP_ACCEPT') == 'application/json'
+        is_raw = 'raw' in request.GET
 
-        if is_api and not is_opt and not is_json:
+        if is_api and not is_opt and not is_json and not is_raw:
             response = HttpResponse(ReactJsMiddleware.INDEX_FILE_CONTENT)
         else:
             response = self.get_response(request)

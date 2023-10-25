@@ -381,6 +381,14 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             return MethodField, dict(source='*', method_name=field_name)
         return field_cls, field_kwargs
 
+    def build_relational_field(self, field_name, relation_info):
+        method_name = 'get_{}'.format(field_name)
+        if method_name in self.item.view_methods and self.context['view'].action not in ('create', 'update'):
+            field_cls, field_kwargs = MethodField, dict(source='*', method_name=method_name)
+        else:
+            field_cls, field_kwargs = super().build_relational_field(field_name, relation_info)
+        return field_cls, field_kwargs
+
     def build_standard_field(self, field_name, model_field):
         method_name = 'get_{}'.format(field_name)
         if method_name in self.item.view_methods and self.context['view'].action not in ('create', 'update'):

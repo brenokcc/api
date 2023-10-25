@@ -68,13 +68,16 @@ def to_camel_case(name):
 
 
 def to_calendar(qs, request, attr_name):
+    today = date.today()
     day = request.GET.get(f'{attr_name}__day')
     month = request.GET.get(f'{attr_name}__month')
     year = request.GET.get(f'{attr_name}__year')
     if month and year:
         start = date(int(year), int(month), 1)
     else:
-        start = qs.order_by(attr_name).values_list(attr_name, flat=True).first() or date.today()
+        start = qs.filter(**{f'{attr_name}__month': today.month}).values_list(attr_name, flat=True).first()
+        if start is None:
+            start = qs.order_by(attr_name).values_list(attr_name, flat=True).first() or today
         month = start.month
         year = start.year
     current = date(start.year, start.month, 1)
@@ -88,7 +91,7 @@ def to_calendar(qs, request, attr_name):
     if day:
         qs = qs.filter(**{f'{attr_name}__day': day})
     next = current + timedelta(days=31)
-    previous = current + timedelta(days=-31)
+    previous = current + timedelta(days=-1)
     return qs, dict(
         field=attr_name, total=total,
         day=day, month=month, year=year, next=dict(month=next.month, year=next.year),

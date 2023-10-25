@@ -290,6 +290,8 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
         self.user_message = str(message).replace('\n', '<br>')
 
     def redirect(self, url):
+        if url.startswith('/'):
+            url = '{}{}'.format(self.host_url(), url)
         raise JsonResponseReadyException(dict(redirect=url))
 
     @property
