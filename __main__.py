@@ -212,6 +212,7 @@ API_YML = '''api:
     success: 1351b4
     warning: fff5c2
     danger: e52207
+    radius: 5px
   index:
   dashboard:
   groups:
@@ -234,7 +235,9 @@ API_YML = '''api:
           actions: view
       endpoints:
         add:
-          fields: first_name, last_name, username
+          fields: first_name, last_name, username, email, is_superuser
+        edit:
+          fields: first_name, last_name, username, email, is_superuser
         list:
           fields: id, username, api.actions.userroles
           actions: add, view, edit, delete, api.actions.changepassword, api.actions.changepasswords

@@ -4,6 +4,26 @@ from api.specification import API
 
 api = API.instance()
 
+
+class RoleQuerySet(models.QuerySet):
+
+    def contains(self, *names):
+        _names = getattr(self, '_names', None)
+        if _names is None:
+            _names = set(self.filter(name__in=names, active=True).values_list('name', flat=True))
+            setattr(self, '_names', _names)
+        for name in names:
+            if name in _names:
+                return True
+        return False
+
+    def active(self):
+        return self.filter(active=True)
+
+    def inactive(self):
+        return self.filter(active=False)
+
+
 class Role(models.Model):
     username = models.CharField(max_length=50, db_index=True)
     name = models.CharField(max_length=50, db_index=True)
@@ -11,6 +31,8 @@ class Role(models.Model):
     model = models.CharField(max_length=50, db_index=True, null=True)
     value = models.IntegerField('Value', db_index=True, null=True)
     active = models.BooleanField('Active', default=True, null=True)
+
+    objects = RoleQuerySet()
 
     def __str__(self):
         return self.get_description()

@@ -116,6 +116,9 @@ class UserCache(object):
     def key(self, k):
         return '{}-{}'.format(self.user.username, k)
 
+    def delete(self, k):
+        return cache.delete(self.key(k))
+
 
 class ActionMetaclass(serializers.SerializerMetaclass):
     def __new__(mcs, name, bases, attrs):
@@ -320,7 +323,7 @@ class Action(serializers.Serializer, metaclass=ActionMetaclass):
             lookups[name] = scopes
         return apply_lookups(queryset, lookups, self.user)
 
-    def requires(self, *role_names, **scopes):
+    def check(self, *role_names, **scopes):
         if self.user.is_superuser:
             return True
         if scopes:

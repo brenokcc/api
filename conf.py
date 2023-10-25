@@ -7,7 +7,7 @@ USE_TZ = False
 STATIC_ROOT = 'static'
 MEDIA_ROOT = 'media'
 MEDIA_URL = 'media/'
-SITE_URL = 'http://localhost:8000'
+SITE_URL = os.environ.get('SITE_URL', 'http://localhost:8000')
 ALLOWED_HOSTS = ['*']
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -17,19 +17,12 @@ USE_THOUSAND_SEPARATOR = False
 REST_FRAMEWORK = {
     'DATE_FORMAT': "%Y-%m-%dT%H:%M:%S",
     'DATETIME_FORMAT': "%Y-%m-%dT%H:%M:%S",
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.DjangoModelPermissions',
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_FILTER_BACKENDS': [
-        # 'django_filters.rest_framework.DjangoFilterBackend',
-        # 'rest_framework.filters.SearchFilter',
-        # 'rest_framework.filters.OrderingFilter',
-    ],
+    'DEFAULT_PERMISSION_CLASSES': [],
+    'DEFAULT_FILTER_BACKENDS': [],
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.BasicAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
+        'api.authentication.CachedTokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',

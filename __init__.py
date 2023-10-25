@@ -1,4 +1,5 @@
 import warnings
+from django.apps import apps
 from django.db import models
 from django.db.models import manager, Q, CharField
 from django.db.models.aggregates import Sum, Avg
@@ -37,6 +38,22 @@ class ModelMixin(object):
                 except FieldDoesNotExist:
                     pass
         return None
+
+    def getroles(self, username_lookup='username'):
+        roles = getattr(self, '_roles', None)
+        if roles is None:
+            obj = self
+            for attr_name in username_lookup.split('__'):
+                obj = getattr(obj, attr_name)
+            roles = apps.get_model('api.role').objects.filter(username=obj)
+            setattr(self, '_roles', roles)
+        return roles
+
+    def getuser(self, username_lookup):
+        obj = self
+        for attr_name in username_lookup.split('__'):
+            obj = getattr(obj, attr_name)
+        return apps.get_model('auth.user').objects.get(username=obj)
 
     def valueset(self, *fields, autoreload=0):
         return ValueSet(self, *fields, autoreload=autoreload)
@@ -138,6 +155,9 @@ class BaseManager(manager.BaseManager):
 
     def all(self):
         return self.get_queryset().all()
+
+    def __call__(self, model):
+        return apps.get_model(model)
 
 
 class Manager(BaseManager.from_queryset(QuerySet)):
