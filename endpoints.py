@@ -1,4 +1,5 @@
 import os
+import io
 import yaml
 import decimal
 import json
@@ -17,17 +18,22 @@ from rest_framework.exceptions import ValidationError
 from .permissions import check_roles, check_lookups, apply_lookups
 from .icons import ICONS
 from .components import Boxes
-from .utils import to_snake_case, as_choices
+from .utils import to_snake_case, as_choices, to_csv_temp_file, to_xls_temp_file
 from .exceptions import JsonResponseReadyException
 from .specification import API
+from .tasks import TaskRunner
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.cache import cache
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.db.models import QuerySet
 
 
 ACTIONS = {}
+TARGET_USER = 'user'
+TARGET_INSTANCE = 'instance'
+TARGET_INSTANCES = 'instances'
+TARGET_QUERYSET = 'queryset'
 
 CharField = serializers.CharField
 BooleanField = serializers.BooleanField
@@ -81,13 +87,13 @@ def actions_metadata(source, actions, context, base_url, instances=(), viewer=No
             ids = []
             target = 'instances'
             url = f'{base_url}{name}/'
-            append = serializer.has_permission()
+            append = serializer.check_permission()
         elif cls.get_target() == 'queryset':
             ids = []
             target = 'queryset'
             url = f'{base_url}{name}/'
             url = '{}{}/'.format(context['request'].path, name)
-            append = serializer.has_permission()
+            append = serializer.check_permission()
         else:
             target = 'instance'
             if name in ('view', 'preview'):
@@ -95,7 +101,7 @@ def actions_metadata(source, actions, context, base_url, instances=(), viewer=No
                 url = f'{base_url}{{id}}/' if viewer is None else f'{base_url}{{id}}/{viewer}/'
             else:
                 url = f'{base_url}{{id}}/{name}/'
-            ids = serializer.check_permission(instances)
+            ids = serializer.test_permission(instances)
             append = True
         if append:
             l.append(dict(name=cls.metadata('title', name), url=url, icon=icon, target=target, modal=cls.metadata('modal', True), style=cls.metadata('style', 'primary'), ids=ids))
@@ -218,15 +224,15 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     def execute(self, task):
         self.user_task = task.key
-        task.start()
+        TaskRunner(task).start()
 
     def load(self):
         pass
 
-    def hide(self, *names):
+    def disable(self, *names):
         self.controls['hide'].extend(names)
 
-    def show(self, *names):
+    def enable(self, *names):
         self.controls['show'].extend(names)
 
     def getdata(self, name, default=None):
@@ -253,7 +259,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                 pass
             return default if value is None else value
 
-    def set(self, **kwargs):
+    def setdata(self, **kwargs):
         for k, v in kwargs.items():
             if isinstance(v, models.Model):
                 v = dict(id=v.id, text=str(v))
@@ -288,7 +294,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         self.notify('Ação realizada com sucesso.')
         return {}
 
-    def has_permission(self):
+    def check_permission(self):
         return self.user.is_superuser
 
     def notify(self, message):
@@ -307,11 +313,11 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
     def request(self):
         return super().context['request']
 
-    def check_permission(self, instances=()):
+    def test_permission(self, instances=()):
         ids = []
         for instance in instances:
             self.instance = instance
-            if self.has_permission():
+            if self.check_permission():
                 ids.append(instance.id)
         return ids
 
@@ -330,7 +336,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
             lookups[name] = scopes
         return apply_lookups(queryset, lookups, self.user)
 
-    def check(self, *role_names, **scopes):
+    def check_roles(self, *role_names, **scopes):
         if self.user.is_superuser:
             return True
         if scopes:
@@ -375,6 +381,12 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     def host_url(self):
         return "{}://{}".format(self.request.META.get('X-Forwarded-Proto', self.request.scheme), self.request.get_host())
+
+    def to_xls_file(self, **sheets):
+        return open(to_xls_temp_file(sheets), 'rb')
+
+    def to_csv_file(self, rows):
+        return open(to_csv_temp_file(rows), 'rb')
 
     def to_response(self, key=None):
         from .serializers import serialize_value, serialize_fields
@@ -428,6 +440,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                     result = self.get_result()
                     if isinstance(result, HttpResponse):
                         return result
+                    if isinstance(result, io.BufferedReader):
+                        return FileResponse(result)
                 except JsonResponseReadyException as e:
                     return Response(e.data)
                 except Exception as e:
@@ -475,7 +489,7 @@ class EndpointSet(Endpoint):
             cls = ACTIONS[cls] if isinstance(cls, str) else cls
             self.request.path = '/api/v1/{}/'.format(cls.get_api_name())
             action = cls(context=self.context, instance=self.request.user)
-            if action.has_permission() and (only is None or cls.get_api_name()==only):
+            if action.check_permission() and (only is None or cls.get_api_name()==only):
                 if action.metadata('sync', True) or action.is_cached() or cls.get_api_name()==only:
                     response = action.to_response()
                     if response.data is not None:
@@ -500,7 +514,7 @@ class Shortcuts(Endpoint):
                 boxes.append(item.icon, label, item.url)
         return boxes if boxes else None
 
-    def has_permission(self):
+    def check_permission(self):
         return self.instance.is_authenticated
 
 class Dashboard(EndpointSet):
@@ -509,7 +523,7 @@ class Dashboard(EndpointSet):
     class Meta:
         api_tag = 'api'
 
-    def has_permission(self):
+    def check_permission(self):
         return self.user.is_authenticated
 
 
@@ -520,7 +534,7 @@ class Icons(Endpoint):
     def get(self):
         return dict(type='icons', icons=ICONS)
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 
@@ -528,7 +542,7 @@ class Logout(Endpoint):
     def get(self):
         self.redirect('/')
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 
@@ -552,7 +566,7 @@ class Manifest(Endpoint):
             }
         )
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 class Application(Endpoint):
@@ -597,7 +611,7 @@ class Application(Endpoint):
             data['footer']['logo'] = '{}{}'.format(url, data['footer']['logo'])
         return data
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 
@@ -620,7 +634,7 @@ class ActivateRole(Endpoint):
         self.notify('Papel ativado com sucesso')
         self.redirect('/api/v1/dashboard/')
 
-    def has_permission(self):
+    def check_permission(self):
         return self.user.is_superuser or self.user.username == self.instance.username
 
 
@@ -646,7 +660,7 @@ class UserResources(Endpoint):
                     resources.append({'name': name, 'url': item.url})
         return resources
 
-    def has_permission(self):
+    def check_permission(self):
         return self.user.is_authenticated
 
 
@@ -669,7 +683,7 @@ class ChangePassword(Endpoint):
         else:
             self.notify('Senha alterada com sucesso')
 
-    def has_permission(self):
+    def check_permission(self):
         return self.user.is_superuser or self.user == self.instance
 
 
@@ -696,7 +710,7 @@ class VerifyPassword(Endpoint):
     def post(self):
         return self.notify(self.instance.check_password(self.data['senha']))
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 
@@ -705,5 +719,10 @@ class TaskProgress(Endpoint):
         api_tag = 'api'
 
     def get(self):
-        value = cache.get(self.request.GET.get('key'), 0)
-        return value
+        data = cache.get(self.request.GET.get('key'), None)
+        if data['file_path']:
+            return open(data['file_path'], 'rb')
+        return data
+
+    def check_permission(self):
+        return True

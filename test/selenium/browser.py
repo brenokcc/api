@@ -329,8 +329,7 @@ class Browser(webdriver.Firefox):
                 tds = trs[i].find_elements(By.TAG_NAME, 'td')
                 tds[j].find_element(By.CSS_SELECTOR, 'input[type=checkbox]').click() if checkbox else tds[j].click()
             else:
-                self.wait()
-                self.click_cell(i, j, checkbox=checkbox, count=count - 1)
+                raise WebDriverException()
         except WebDriverException as e:
             if count:
                 self.wait()

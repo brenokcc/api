@@ -1,4 +1,7 @@
 import re
+import csv
+from tempfile import mktemp
+import xlwt
 import operator
 from datetime import datetime, date, timedelta
 from django.db import models
@@ -97,3 +100,21 @@ def to_calendar(qs, request, attr_name):
         day=day, month=month, year=year, next=dict(month=next.month, year=next.year),
         previous=dict(month=previous.month, year=previous.year)
     )
+
+def to_xls_temp_file(**sheets):
+    wb = xlwt.Workbook(encoding='iso8859-1')
+    for title, rows in sheets.items():
+        sheet = wb.add_sheet(str(title))
+        for row_idx, row in enumerate(rows):
+            for col_idx, label in enumerate(row):
+                sheet.write(row_idx, col_idx, label=label)
+    file_path = mktemp(suffix='.xls')
+    wb.save(file_path)
+
+def to_csv_temp_file(rows):
+    file_path = mktemp(suffix='.csv')
+    with open(file_path, 'w', encoding='iso8859-1') as output:
+        writer = csv.writer(output)
+        for row in rows:
+            writer.writerow([str(col).replace(' – ', ' - ') for col in row])
+    return file_path

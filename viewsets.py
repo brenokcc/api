@@ -200,8 +200,8 @@ class List(Endpoint):
     def get_qualified_name(cls):
         return 'list'
 
-    def has_permission(self):
-        return super().has_permission() or permissions.check_roles(self.context['view'].item.list_lookups, self.user, False)
+    def check_permission(self):
+        return super().check_permission() or permissions.check_roles(self.context['view'].item.list_lookups, self.user, False)
 
 
 class Add(Endpoint):
@@ -213,8 +213,8 @@ class Add(Endpoint):
     def get_qualified_name(cls):
         return 'add'
 
-    def has_permission(self):
-        return super().has_permission() or permissions.check_roles(self.context['view'].item.add_lookups, self.user, False)
+    def check_permission(self):
+        return super().check_permission() or permissions.check_roles(self.context['view'].item.add_lookups, self.user, False)
 
 
 class Edit(Endpoint):
@@ -226,8 +226,8 @@ class Edit(Endpoint):
     def get_qualified_name(cls):
         return 'edit'
 
-    def has_permission(self):
-        return super().has_permission() or permissions.check_roles(self.context['view'].item.edit_lookups, self.user, False)
+    def check_permission(self):
+        return super().check_permission() or permissions.check_roles(self.context['view'].item.edit_lookups, self.user, False)
 
 
 class Delete(Endpoint):
@@ -239,8 +239,8 @@ class Delete(Endpoint):
     def get_qualified_name(cls):
         return 'delete'
 
-    def has_permission(self):
-        return super().has_permission() or permissions.check_roles(self.context['view'].item.delete_lookups, self.user, False)
+    def check_permission(self):
+        return super().check_permission() or permissions.check_roles(self.context['view'].item.delete_lookups, self.user, False)
 
 
 class View(Endpoint):
@@ -253,7 +253,7 @@ class View(Endpoint):
     def get_qualified_name(cls):
         return 'view'
 
-    def has_permission(self):
+    def check_permission(self):
         item = specification.getitem(type(self.instance))
         return permissions.check_roles(item.view_lookups, self.user, False)
 
@@ -473,7 +473,7 @@ class UserSerializer(serializers.Serializer):
             return data
         return {}
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 
@@ -609,7 +609,7 @@ def model_view_set_factory(model_name):
             if qualified_name in ('add', 'view', 'edit', 'delete', 'list'): continue
             cls2 = ACTIONS[qualified_name]
             if cls2.get_target() == 'queryset':
-                k2 = cls2.get_qualified_name()
+                k2 = cls2.get_api_name()
                 method = 'post' if cls2._declared_fields else 'get'
                 methods = ['post', 'get'] if specification.app else [method]
                 manual_parameters = [only_fields, choices_field, choices_search]
@@ -628,7 +628,7 @@ def filter_param(name):
 def create_action_view_func(action_class):
     def func(self, request, *args, **kwargs):
         serializer = action_class(context=dict(request=request, view=self), instance=request.user)
-        if not serializer.has_permission():
+        if not serializer.check_permission():
             raise exceptions.PermissionDenied(' You do not have permission to perform this action.', 403)
         return serializer.to_response()
 
@@ -682,7 +682,7 @@ def create_action_func(serializar_class, relation_name=None):
         else:
             source = self.model.objects.all()
         serializer = serializar_class(context=dict(request=request, view=self), instance=source)
-        if not serializer.has_permission():
+        if not serializer.check_permission():
             raise exceptions.PermissionDenied(' You do not have permission to perform this action.', 403)
         return serializer.to_response()
 
