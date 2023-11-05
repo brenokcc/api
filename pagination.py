@@ -13,6 +13,13 @@ from .exceptions import JsonResponseReadyException
 specification = API.instance()
 
 
+def role_filter_field(request):
+    value = request.GET.get('userrole')
+    choices = [{'id': '', 'text': ''}]
+    choices.extend({'id': k, 'text': v} for k, v in specification.groups.items())
+    return dict(name='userrole', type='select', value=value, label='Papel', choices=choices)
+
+
 def filter_field(model, lookups, request):
     name = lookups.strip()
     suffix = None
@@ -72,6 +79,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
         self.relation_name = relation_name
         self.context = dict(request=request, view=view)
         self.subset = request.GET.get('subset')
+        self.page_size = min(int(request.GET.get('page_size', 10)), 1000)
         queryset = queryset.order_by('id') if not queryset.ordered else queryset
         key = '{}.{}'.format(self.model._meta.app_label, self.model._meta.model_name)
         item = specification.items[key]
@@ -121,7 +129,10 @@ class PageNumberPagination(pagination.PageNumberPagination):
                 search.append(name)
 
             for lookup in metadata.get('filters', ()):
-                field = filter_field(self.model, lookup, self.context['request'])
+                if lookup.endswith('userrole'):
+                    field = role_filter_field(self.context['request'])
+                else:
+                    field = filter_field(self.model, lookup, self.context['request'])
                 if field:
                     filters.append(field)
 
@@ -148,6 +159,8 @@ class PageNumberPagination(pagination.PageNumberPagination):
             response.data.update(subsets=subsets, subset=self.context['request'].GET.get('subset'))
         if aggregations:
             response.data.update(aggregations=aggregations)
+
+        response.data.update(page_size=self.page_size, page_sizes=[5, 10, 15, 20, 25, 50, 100])
 
         if relation_name:
             for k in ['next', 'previous']:

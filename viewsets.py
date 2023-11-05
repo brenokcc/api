@@ -11,9 +11,6 @@ from django.core.exceptions import ValidationError
 from django.db.models.signals import m2m_changed, post_save, post_delete
 from django.utils.autoreload import autoreload_started
 from django.core.cache import cache
-from drf_yasg import openapi
-from drf_yasg.inspectors import SwaggerAutoSchema
-from drf_yasg.utils import swagger_auto_schema
 from rest_framework import exceptions
 from rest_framework import filters
 from rest_framework import routers
@@ -34,31 +31,7 @@ from .endpoints import ACTIONS, Endpoint, EndpointSet
 from .serializers import *
 from .specification import API
 from .utils import to_snake_case, related_model, as_choices, to_choices
-
-
-q_field = openapi.Parameter('q', openapi.IN_QUERY, description="Keywords used to execute the search.", type=openapi.TYPE_STRING)
-only_fields = openapi.Parameter('only', openapi.IN_QUERY, description="The name of the fields to be retrieved separated by comma (,).", type=openapi.TYPE_STRING)
-page = openapi.Parameter('page', openapi.IN_QUERY, description="Number of the page of the relation.", type=openapi.TYPE_STRING)
-relation_page = openapi.Parameter('relation_page', openapi.IN_QUERY, description="Number of the page of the relation.", type=openapi.TYPE_STRING)
-choices_field = openapi.Parameter('choices_field', openapi.IN_QUERY, description="Name of the field from which the choices will be displayed.", type=openapi.TYPE_STRING)
-choices_search = openapi.Parameter('choices_search', openapi.IN_QUERY, description="Term to be used in the choices search.", type=openapi.TYPE_STRING)
-subset_param = openapi.Parameter('subset', openapi.IN_QUERY, description="Name of the subset to be displayed", type=openapi.TYPE_STRING)
-id_parameter = openapi.Parameter('id', openapi.IN_PATH, description="The id of the object.", type=openapi.TYPE_INTEGER)
-ids_parameter = openapi.Parameter('ids', openapi.IN_PATH, description="The ids of the objects separated by comma (,).", type=openapi.TYPE_STRING)
-
-
-class AutoSchema(SwaggerAutoSchema):
-
-    def get_tags(self, operation_keys=None):
-        tags = self.overrides.get('tags', None)
-        if not tags:
-            model = getattr(self.view, 'model', None)
-            if model:
-                tags = [model.__name__.lower()]
-        if not tags:
-            tags = [operation_keys[0]]
-
-        return tags
+from .doc import apidoc
 
 
 class ObtainAuthToken(ObtainAuthToken):
@@ -73,9 +46,7 @@ class ObtainAuthToken(ObtainAuthToken):
             )
             response = requests.post(provider['access_token_url'], data=access_token_request_data, verify=False)
             if response.status_code != 200:
-                print(redirect_uri)
                 print('Logging with {} failed: {}'.format(name, response.text))
-                break
                 continue
             data = json.loads(response.text)
             headers = {
@@ -307,28 +278,28 @@ class ModelViewSet(viewsets.ModelViewSet):
             cls = ModelViewSet.SERIALIZERS.get(key)
             if cls is None:
                 if self.action == 'create':
-                    if self.item.add_fieldsets:
-                        _fields = []
-                        for v in self.item.add_fieldsets.values():
-                            _fields.extend(v)
-                    else:
-                        _fields = self.item.add_fields
+                    _fields = []
+                    for fieldset in self.item.add_fieldsets.values():
+                        if fieldset.get('requires'):
+                            if not permissions.check_roles(fieldset.get('requires'), self.request.user, False):
+                                continue
+                        _fields.extend(fieldset['fields'].keys())
                 elif self.action == 'list':
                     _fields = self.item.list_display
                 elif self.action == 'retrieve':
-                    _fields = self.item.view_fields
+                    _fields = [k[4:] if k.startswith('get_') else k for k in self.item.view_fields.keys()]
                 elif self.action == 'update' or self.action == 'partial_update':
-                    if self.item.edit_fieldsets:
-                        _fields = []
-                        for v in self.item.edit_fieldsets.values():
-                            _fields.extend(v)
-                    else:
-                        _fields = self.item.edit_fields
+                    _fields = []
+                    for fieldset in (self.item.edit_fieldsets or self.item.add_fieldsets).values():
+                        if fieldset.get('requires'):
+                            if not permissions.check_roles(fieldset.get('requires'), self.request.user, False):
+                                continue
+                        _fields.extend(fieldset['fields'].keys())
                 elif self.action == 'destroy':
                     _fields = 'id',
                 elif self.action in self.item.relations:
                     _exclude = self.item.relations[self.action]['related_field'],
-                    _model = getattr(_model, self.action).field.remote_field.related_model
+                    _model = getattr(_model(pk=0), self.action)().model
                 else:
                     _fields = self.item.list_display
                 class cls(DynamicFieldsModelSerializer):
@@ -349,7 +320,7 @@ class ModelViewSet(viewsets.ModelViewSet):
             object._wrap = True
         return object
 
-    @swagger_auto_schema(manual_parameters=[only_fields, page, subset_param])
+    @apidoc(parameters=['only_fields', 'page', 'page_size', 'subset_param'])
     def retrieve(self, request, *args, **kwargs):
         permissions.check_roles(self.item.view_lookups, request.user)
         relation_name = request.GET.get('only')
@@ -380,7 +351,7 @@ class ModelViewSet(viewsets.ModelViewSet):
             form = dict(type='form', icon='plus', method='post', name=name, action=request.path, fields=serialize_fields(serializer, self.item.add_fieldsets))
             return Response(form)
 
-    @swagger_auto_schema(manual_parameters=[choices_field, choices_search])
+    @apidoc(parameters=['choices_field', 'choices_search'])
     def create(self, request, *args, **kwargs):
         permissions.check_roles(self.item.add_lookups, request.user)
         try:
@@ -406,10 +377,10 @@ class ModelViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance, data=instance.__dict__)
             serializer.is_valid()
             name = '{}_{}'.format('Editar', self.model._meta.verbose_name)
-            form = dict(type='form', icon='pencil', method='put', name=name, action=request.path, fields=serialize_fields(serializer, self.item.edit_fieldsets))
+            form = dict(type='form', icon='pencil', method='put', name=name, action=request.path, fields=serialize_fields(serializer, (self.item.edit_fieldsets or self.item.add_fieldsets)))
             return Response(form)
 
-    @swagger_auto_schema(manual_parameters=[choices_field, choices_search])
+    @apidoc(parameters=['choices_field', 'choices_search'])
     def update(self, request, *args, **kwargs):
         permissions.check_roles(self.item.edit_lookups, request.user)
         return self.choices_response(request) or self.update_form(request) or self.post_update(
@@ -435,7 +406,7 @@ class ModelViewSet(viewsets.ModelViewSet):
             form = dict(type='form', icon='trash', method='delete', name=name, action=request.path.replace('delete/', ''), fields=serialize_fields(serializer))
             return Response(form)
 
-    @swagger_auto_schema(manual_parameters=[])
+    @apidoc(parameters=[])
     def destroy(self, request, *args, **kwargs):
         permissions.check_roles(self.item.delete_lookups, request.user)
         return self.destroy_form(request) or self.post_destroy(super().destroy(request, *args, **kwargs))
@@ -490,7 +461,7 @@ class UserViewSet(viewsets.GenericViewSet):
     def get_queryset(self):
         return apps.get_model('auth.user').objects.filter(pk=self.request.user.id)
 
-    @swagger_auto_schema(manual_parameters=[only_fields])
+    @apidoc(parameters=['only_fields'])
     @action(detail=False, methods=["get"], url_path='user', url_name='user')
     def user(self, request, format=None):
         return Response(self.get_serializer(request.user).data, status=status.HTTP_200_OK)
@@ -501,9 +472,8 @@ class UserViewSet(viewsets.GenericViewSet):
             if serializer_cls.get_target() == 'user':
                 k = serializer_cls.get_api_name()
                 methods = serializer_cls.get_api_methods()
-                manual_parameters = [choices_field, choices_search] if serializer_cls._declared_fields else []
                 function = create_action_view_func(serializer_cls)
-                swagger_auto_schema(manual_parameters=manual_parameters)(function)
+                apidoc(parameters=(['choices_field', 'choices_search'] if serializer_cls._declared_fields else []))(function)
                 action(detail=False, methods=methods, url_path=f'user/{k}', url_name=k, name=k)(function)
                 setattr(cls, k, function)
 
@@ -527,9 +497,8 @@ class ActionViewSet(viewsets.GenericViewSet):
              if action_class.get_target() is None:
                 k = action_class.get_api_name()
                 methods = action_class.get_api_methods()
-                manual_parameters = [choices_field, choices_search] if 'post' in methods else []
                 function = create_action_view_func(action_class)
-                swagger_auto_schema(tags=action_class.get_api_tags(), manual_parameters=manual_parameters)(function)
+                apidoc(tags=action_class.get_api_tags(), parameters=(['choices_field', 'choices_search'] if 'post' in methods else []))(function)
                 action(detail=False, methods=methods, url_path=k, url_name=k, name=k)(function)
                 setattr(cls, k, function)
                 cls.ACTIONS[k] = action_class
@@ -543,7 +512,7 @@ class HealthViewSet(viewsets.GenericViewSet):
     def get_queryset(self):
         return User.objects.none()
 
-    @swagger_auto_schema(tags=['health'])
+    @apidoc(tags=['health'])
     @action(detail=False, methods=["get"], url_path='check', url_name='check')
     def check(self, request):
         return Response({'status': 'UP', 'time': datetime.datetime.now().isoformat()}, status=status.HTTP_200_OK)
@@ -571,11 +540,16 @@ def model_view_set_factory(model_name):
         item = _item
         ordering_fields = item.ordering
 
-        @swagger_auto_schema(manual_parameters=[q_field, only_fields, choices_field, choices_search, relation_page, subset_param] + [filter_param(name) for name in _item.filters])
+        @apidoc(parameters=['q_field', 'only_fields', 'choices_field', 'choices_search', 'page_size', 'relation_page', 'subset_param'], filters=_item.filters)
         def list(self, *args, **kwargs):
             return super().list(*args, **kwargs)
 
-    for qualified_name in item.actions:
+    action_names = []
+    action_names.extend(item.actions)
+    for fieldset in item.view_fields.values():
+        action_names.extend(fieldset.get('actions'))
+
+    for qualified_name in action_names:
         if qualified_name in ('add', 'view', 'edit', 'delete', 'list'): continue
         cls = ACTIONS[qualified_name]
         k = cls.get_api_name()
@@ -583,26 +557,24 @@ def model_view_set_factory(model_name):
         function = create_action_func(cls)
         method = 'post' if cls._declared_fields else 'get'
         methods = ['post', 'get'] if specification.app else [method]
-        manual_parameters = [only_fields, choices_field, choices_search]
+        parameters = ['only_fields', 'choices_field', 'choices_search']
         if cls.get_target() == 'instances' or cls.get_target() == 'queryset':
             detail = False
             if cls.get_target() == 'instances':
                 url_path = f'{k}/(?P<ids>[0-9,]+)'
-                manual_parameters.append(ids_parameter)
+                parameters.append('ids_parameter')
         else:
             detail = True
-            manual_parameters.append(id_parameter)
-        swagger_auto_schema(manual_parameters=manual_parameters)(function)
+            parameters.append('id_parameter')
+        apidoc(parameters=parameters)(function)
         action(detail=detail, methods=['post', 'get'], url_path=url_path, url_name=k, name=k)(function)
         setattr(ViewSet, k, function)
         ViewSet.ACTIONS[k] = cls
 
-
     for k in item.relations:
         if item.relations[k].get('related_field'):
             function = create_relation_func(k, item.relations[k])
-            manual_parameters = [only_fields]
-            swagger_auto_schema(manual_parameters=manual_parameters)(function)
+            apidoc(parameters=['only_fields'])(function)
             action(detail=True, methods=['post', 'get'], url_path='{}/add'.format(k), url_name=k, name=k)(function)
             setattr(ViewSet, k, function)
         for qualified_name in item.relations[k].get('actions'):
@@ -612,17 +584,12 @@ def model_view_set_factory(model_name):
                 k2 = cls2.get_api_name()
                 method = 'post' if cls2._declared_fields else 'get'
                 methods = ['post', 'get'] if specification.app else [method]
-                manual_parameters = [only_fields, choices_field, choices_search]
                 function = create_action_func(cls2, item.relations[k]['name'])
-                swagger_auto_schema(manual_parameters=manual_parameters)(function)
+                apidoc(parameters=['only_fields', 'choices_field', 'choices_search'])(function)
                 action(detail=True, methods=['post', 'get'], url_path=k2, url_name=k2, name=k2)(function)
                 setattr(ViewSet, k2, function)
                 ViewSet.ACTIONS[k2] = cls2
     return ViewSet
-
-
-def filter_param(name):
-    return openapi.Parameter(name, openapi.IN_QUERY, description=name, type=openapi.TYPE_STRING)
 
 
 def create_action_view_func(action_class):

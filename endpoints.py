@@ -20,13 +20,14 @@ from .icons import ICONS
 from .components import Boxes
 from .utils import to_snake_case, as_choices, to_csv_temp_file, to_xls_temp_file
 from .exceptions import JsonResponseReadyException
-from .specification import API
+from .specification import API, str_to_width_list
 from .tasks import TaskRunner
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.cache import cache
 from django.conf import settings
 from django.http import HttpResponse, FileResponse
 from django.db.models import QuerySet
+from . import permissions
 
 
 ACTIONS = {}
@@ -178,6 +179,10 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         super().__init__(data=data, *args, **kwargs)
 
     @classmethod
+    def get_icon(cls):
+        return cls.metadata('icon', None)
+
+    @classmethod
     def get_target(cls):
         return cls.metadata('target', None)
 
@@ -291,7 +296,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         if hasattr(self, 'save'):
             if isinstance(self, serializers.ModelSerializer):
                 self.instance.save()
-        self.notify('Ação realizada com sucesso.')
+        self.notify('Ação realizada com sucesso')
         return {}
 
     def check_permission(self):
@@ -303,7 +308,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
     def redirect(self, url):
         if url.startswith('/'):
             url = '{}{}'.format(self.host_url(), url)
-        raise JsonResponseReadyException(dict(redirect=url))
+        raise JsonResponseReadyException(dict(redirect=url, message=self.user_message))
 
     @property
     def user(self):
@@ -388,6 +393,22 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
     def to_csv_file(self, rows):
         return open(to_csv_temp_file(rows), 'rb')
 
+    def get_fieldsets(self):
+        fieldsets = {}
+        for k, v in (self.fieldsets or self.metadata('fieldsets', {})).items():
+            if isinstance(v, str):
+                fieldsets[k] = dict(name=k, fields={name: width for name, width in str_to_width_list(v)})
+            else:
+                fields = {}
+                for name in v:
+                    if isinstance(name, str):
+                        fields[name] = 100
+                    else:
+                        for name2 in name:
+                            fields[name2] = int(100/len(name))
+                fieldsets[k] = dict(name=k, fields=fields)
+        return fieldsets
+
     def to_response(self, key=None):
         from .serializers import serialize_value, serialize_fields
         on_change = self.request.query_params.get('on_change')
@@ -421,7 +442,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
             self.is_valid()
             form = dict(
                 type='form', method=self.get_method().lower(), name=self.get_name(), icon=self.metadata('icon'),
-                action=self.get_url(), fields=serialize_fields(self, self.fieldsets or self.metadata('fieldsets')),
+                action=self.get_url(), fields=serialize_fields(self, self.get_fieldsets()),
                 controls=self.controls, watch=self.watchable_field_names(), style=self.metadata('style'),
                 help_text=self.get_help_text()
             )
@@ -521,6 +542,7 @@ class Dashboard(EndpointSet):
     endpoints = Shortcuts,
 
     class Meta:
+        title = 'Início'
         api_tag = 'api'
 
     def check_permission(self):
@@ -529,13 +551,14 @@ class Dashboard(EndpointSet):
 
 class Icons(Endpoint):
     class Meta:
+        title = 'Ícones'
         api_tag = 'api'
 
     def get(self):
         return dict(type='icons', icons=ICONS)
 
     def check_permission(self):
-        return True
+        return self.user.is_superuser
 
 
 class Logout(Endpoint):
@@ -574,15 +597,52 @@ class Application(Endpoint):
     class Meta:
         api_tag = 'api'
 
+    def __init__(self, *args, **kwargs):
+        self.specification = API.instance()
+        super().__init__(*args, **kwargs)
+
+    def process_menu_entry(self, menu, entry, i=0):
+        endpoint = entry.get('endpoint')
+        if endpoint:
+            if endpoint.count('.') == 1:
+                item = self.specification.items[endpoint]
+                if permissions.check_roles(item.list_lookups, self.request.user, raise_exception=False):
+                    cls = apps.get_model(endpoint)
+                    label = cls._meta.verbose_name_plural.title()
+                    icon = (item.icon or 'dot-circle') if i == 0 else None
+                    subitem = dict(icon=icon, label=label, url=item.url)
+                    menu.append(subitem)
+            else:
+                cls = ACTIONS[endpoint]
+                serializer = cls(context=dict(request=self.request), instance=self.request.user)
+                if serializer.check_permission():
+                    label = cls.get_name().title().strip()
+                    icon = (cls.get_icon() or 'dot-circle') if i == 0 else None
+                    subitem = dict(icon=icon, label=label, url='/api/v1/{}/'.format(cls.get_api_name()))
+                    menu.append(subitem)
+        else:
+            label=entry['label']
+            icon = None
+            if label.endswith(']'):
+                tokens = label.split('[')
+                label = tokens[0].strip()
+                icon = tokens[1].strip(']')
+            icon = (icon or 'dot-circle') if i == 0 else None
+            subitem = dict(icon=icon, label=label, children=[])
+            for child in entry.get('children'):
+                self.process_menu_entry(subitem['children'], child, i + 1)
+            if subitem['children']:
+                menu.append(subitem)
+
     def get(self):
         with open(os.path.join(settings.BASE_DIR, 'i18n.yml')) as file:
             i18n = yaml.safe_load(file)
-        specification = API.instance()
-        index_url = '/api/v1/index/' if specification.index else '/api/v1/login/'
+
+        index_url = '/api/v1/index/' if self.specification.index else '/api/v1/login/'
         nocolor = 'radius',
-        theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in specification.theme.items()}
+        theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in self.specification.theme.items()}
         oauth = []
-        for name, provider in specification.oauth.items():
+        for name, provider in self.specification.oauth.items():
             redirect_uri = "{}{}".format(self.request.META.get('HTTP_ORIGIN', self.host_url()), provider['redirect_uri'])
             authorize_url = '{}?response_type=code&client_id={}&redirect_uri={}'.format(
                 provider['authorize_url'], provider['client_id'], redirect_uri
@@ -590,15 +650,22 @@ class Application(Endpoint):
             if provider.get('scope'):
                 authorize_url = '{}&scope={}'.format(authorize_url, provider.get('scope'))
             oauth.append(dict(label=f'Entrar com {provider["name"]}', url=authorize_url))
+
+        menu = []
+        for entry in self.specification.menu:
+            self.process_menu_entry(menu, entry)
+        # import json
+        # print(json.dumps(app_menu, indent=2, ensure_ascii=False))
+
         data = dict(
-            title=specification.title,
-            subtitle=specification.subtitle,
-            footer=specification.footer,
-            icon=specification.icon,
-            logo=specification.logo,
+            title=self.specification.title,
+            subtitle=self.specification.subtitle,
+            footer=self.specification.footer,
+            icon=self.specification.icon,
+            logo=self.specification.logo,
             theme=theme,
             i18n=i18n,
-            menu=[],
+            menu=menu,
             oauth=oauth,
             index=index_url,
         )
@@ -697,7 +764,7 @@ class ChangePasswords(Endpoint):
 
     def post(self):
         for user in self.instance.all():
-            user.set_password(self.data['senha'])
+            user.set_password(self.getdata('senha'))
             user.save()
 
 
@@ -708,7 +775,7 @@ class VerifyPassword(Endpoint):
         target = 'user'
 
     def post(self):
-        return self.notify(self.instance.check_password(self.data['senha']))
+        return self.notify(self.instance.check_password(self.getdata('senha')))
 
     def check_permission(self):
         return True

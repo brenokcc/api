@@ -25,4 +25,8 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(
             name='Scope',
         ),
+        migrations.AlterModelOptions(
+            name='role',
+            options={'verbose_name': 'Papel', 'verbose_name_plural': 'Papéis'},
+        ),
     ]

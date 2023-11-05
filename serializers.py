@@ -109,18 +109,14 @@ def serialize_fields(serializer, fieldsets=None):
         fields = {}
         for k, v in fieldsets.items():
             k = k if k else ''
-            allowed = {}
-            for name in v:
-                if isinstance(name, str):
-                    allowed[name] = 100
-                else:
-                    for x in name:
-                        allowed[x] = int(100/len(name))
             fields[k] = []
+            allowed = {name: width for name, width in v['fields'].items()}
             for f in l:
                 if f['name'] in allowed:
                     f['width'] = allowed[f['name']]
                     fields[k].append(f)
+            if not fields[k]:
+                del fields[k]
     else:
         fields = l
     return fields
@@ -147,8 +143,8 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
         return value
     if isinstance(value, models.QuerySet) and value._iterable_class != ModelIterable:
         return value
-    if isinstance(value, models.Manager) or isinstance(value, models.QuerySet):
-        if isinstance(value, models.Manager):
+    if isinstance(value, models.Manager) or isinstance(value, models.QuerySet) or hasattr(value, 'all'):
+        if not isinstance(value, models.QuerySet):
             value = value.all()
         paginator = PageNumberPagination()
         queryset = paginator.paginate_queryset(value, context['request'], context['view'], relation_name)
@@ -318,12 +314,20 @@ class FieldsetField(serializers.DictField):
         if requires and not permissions.check_roles(requires, self.context['request'].user, False):
             return NONE
         for attr_name in self.fieldset['fields']:
-            api_attr_name = attr_name[4:] if attr_name.startswith('get_') else attr_name
-            if self.only and api_attr_name not in self.only:
-                continue
-            attr_value = getattr(value, attr_name)
-            if isfunction(attr_value) or ismethod(attr_value):
-                attr_value = attr_value()
+            if '.' in attr_name:
+                cls = ACTIONS[attr_name]
+                api_attr_name = cls.get_api_name()
+                serializer = cls(context=self.context, instance=value)
+                if serializer.check_permission():
+                    attr_value = serializer.get()
+                else:
+                    continue
+            elif attr_name.startswith('get_'):
+                api_attr_name = attr_name[4:]
+                attr_value = getattr(value, attr_name)()
+            else:
+                api_attr_name = attr_name
+                attr_value = getattr(value, attr_name)
             if (isinstance(attr_value, models.Manager) or isinstance(value, models.QuerySet)):
                 attr_value = [str(obj) for obj in attr_value.all()]
             data[api_attr_name] = serialize_value(attr_value, self.context)
@@ -340,7 +344,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     def __init__(self, *args, is_relation=False, **kwargs):
         meta = kwargs.pop('meta', None)
         if meta:
-            self.Meta = type("Meta", (), meta)
+            self.Meta = type("Meta", (), dict(model=meta['model'], fields=[k for k in meta['fields']]))
         self.item  = specification.items[
             '{}.{}'.format(self.Meta.model._meta.app_label, self.Meta.model._meta.model_name)
         ]
@@ -360,7 +364,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 if k == name:
                     return field.method_name
             elif isinstance(field, ActionField):
-                if k == name:
+                if name == field.serializer_class.get_api_name():
                     return field.field_name
         return name
 
@@ -369,8 +373,8 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         if names:
             allowed = set()
             for name in names.split(','):
-                name = name.strip()
-                allowed.add(name)
+                allowed.add(name.strip())
+                allowed.add(self.get_real_field_name(name.strip()))
             existing = set(self.fields.keys())
             for field_name in existing - allowed:
                 self.fields.pop(field_name)
@@ -383,7 +387,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
     def build_relational_field(self, field_name, relation_info):
         method_name = 'get_{}'.format(field_name)
-        if method_name in self.item.view_methods and self.context['view'].action not in ('create', 'update'):
+        if method_name in self.item.view_methods and self.context['view'].action in ('list', 'retrieve'):
             field_cls, field_kwargs = MethodField, dict(source='*', method_name=method_name)
         else:
             field_cls, field_kwargs = super().build_relational_field(field_name, relation_info)
@@ -391,7 +395,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
     def build_standard_field(self, field_name, model_field):
         method_name = 'get_{}'.format(field_name)
-        if method_name in self.item.view_methods and self.context['view'].action not in ('create', 'update'):
+        if method_name in self.item.view_methods and self.context['view'].action in ('list', 'retrieve'):
             field_cls, field_kwargs = MethodField, dict(source='*', method_name=method_name)
         else:
             field_cls, field_kwargs = super().build_standard_field(field_name, model_field)
@@ -401,18 +405,19 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
     def build_unknown_field(self, field_name, model_class):
         method_name = 'get_{}'.format(field_name)
-        if method_name in self.item.view_methods:
+        if method_name in self.item.view_methods and self.context['view'].action in ('list', 'retrieve'):
             return MethodField, dict(source='*', method_name=method_name)
-        if field_name in self.item.fieldsets:
-            fieldset = self.item.fieldsets[field_name]
-            return FieldsetField, dict(
-                source='*', fieldset=fieldset, request=self.context['request'],
-                help_text='Returns {}'.format(fieldset['fields'])
-            )
         if field_name in ACTIONS:
             return ActionField, dict(
                 source='*', field_name=field_name, serializer_class=ACTIONS[field_name], context=self.context
             )
+        if field_name in self.item.view_fields:
+            fieldset = self.item.view_fields[field_name]
+            return FieldsetField, dict(
+                source='*', fieldset=fieldset, request=self.context['request'],
+                help_text='Returns {}'.format(fieldset['fields'])
+            )
+
         super().build_unknown_field(field_name, model_class)
 
     def to_representation(self, instance):
@@ -421,7 +426,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 field.check_choices_response()
         if self.context['view'].paginator:
             self.context['view'].paginator.instances.append(instance)
-
         representation = {}
         for k, v in super().to_representation(instance).items():
             if v is not NONE:
@@ -432,14 +436,34 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             representation[k] = v
 
         if specification.app and getattr(instance, '_wrap', False):
+            result = {}
             base_url = '/api/v1/{}/'.format(self.item.prefix)
-            actions = self.item.view_actions
+            for k, v in representation.items():
+                if isinstance(v, dict) and v.get('type') is None:
+                    metadata = self.item.view_fields.get(self.get_real_field_name(k)) if self.item.view_fields else None
+                    result[k] = dict(type="fieldset", fields=[], actions=actions_metadata(
+                            instance, metadata.get('actions') if metadata else [], self.context, base_url, [instance]
+                    ))
+                    for action in result[k]['actions']:
+                        action['url'] = action['url'].format(id=instance.id)
+                    n = len(v)
+                    for x, y in v.items():
+                        width = 100
+                        if metadata:
+                            try:
+                                width = metadata['fields'][x]
+                            except KeyError:
+                                width = metadata['fields'].get(f'get_{x}')
+                        result[k]['fields'].append(dict(key=x, value=y, width=width))
+                else:
+                    result[k] = v
             representation = {
-                'type': 'instance', 'id': instance.id, 'str': str(instance), 'icon': self.item.icon, 'result': representation,
+                'type': 'instance', 'id': instance.id, 'str': str(instance), 'icon': self.item.icon, 'result': result,
                 'actions': actions_metadata(
-                    instance, actions, self.context, base_url, [instance]
+                    instance, self.item.view_actions, self.context, base_url, [instance]
                 ), 'url': self.context['request'].get_full_path()
             }
             for action in representation['actions']:
                 action['url'] = action['url'].format(id=instance.id)
+            #for k, v in representation.items(): print(k, v)
         return representation

@@ -16,6 +16,8 @@ class API:
             for variable in re.findall(r'\$[a-zA-z0-9_]+', content):
                 content = content.replace(variable, os.environ.get(variable[1:], ''))
         data = yaml.safe_load(content).get('api')
+        self.menu = to_menu_items([], data.get('menu', {}))
+        # import pprint; pprint.pprint(self.menu)
         for k, v in data.get('models').items():
             v = {} if v is None else v
             name = k.split('.')[-1]
@@ -37,17 +39,14 @@ class API:
                 filters = str_to_list(v.get('filters')),
                 search = to_search_list(v.get('search')),
                 ordering = str_to_list(v.get('ordering')),
-                fieldsets = to_fieldset_dict(v.get('fieldsets', {})),
-                relations = to_relation_dict(v.get('relations', {})),
-                add_fields = to_fields(endpoints.get('add', {})),
-                add_fieldsets = to_fieldsets(endpoints.get('add', {})),
-                edit_fields=to_fields(endpoints.get('edit', {})),
-                edit_fieldsets=to_fieldsets(endpoints.get('edit', {})),
+                relations = {},
+                add_fieldsets = to_fieldset_dict(endpoints.get('add', {})),
+                edit_fieldsets=to_fieldset_dict(endpoints.get('edit', {})),
                 list_display = to_fields(endpoints.get('list', {}), id_required=True),
                 list_subsets = to_subsets(endpoints.get('list', {})),
                 list_aggregations = to_aggregations(endpoints.get('list', {})),
                 list_calendar = to_calendar(endpoints.get('list', {})),
-                view_fields = to_fields(endpoints.get('view', {})),
+                view_fields = to_fieldset_dict(endpoints.get('view', {})),
                 list_actions = to_action_list(endpoints.get('list', {}), add_default=True),
                 view_actions = to_action_list(endpoints.get('view', {})),
                 roles = to_roles_dict(v.get('roles', {})),
@@ -59,9 +58,10 @@ class API:
                 delete_lookups = delete_lookups or lookups,
             ))
             item.view_methods = [
-                name for name in (item.view_fields + item.list_display) if name.startswith('get_')
+                name for name in (list(item.view_fields.keys()) + item.list_display) if name.startswith('get_')
             ]
-            item.view_fields = [name[4:] if name.startswith('get_') else name for name in item.view_fields]
+            # item.view_fields = [name[4:] if name.startswith('get_') else name for name in item.view_fields]
+            item.relations.update({k: v for k, v in item.view_fields.items() if (k.startswith('get_') or '.' in k)})
             item.list_display = [name[4:] if name.startswith('get_') else name for name in item.list_display]
             self.items[k] = item
 
@@ -107,7 +107,7 @@ def to_action_list(value, key='actions', add_default=False):
     return actions
 
 def str_to_list(s, id_required=False):
-    return [name.strip() for name in s.split(',')] if s else []
+    return [name.strip() for name in s.replace(',', '').replace('  ', ' ').split()] if s else []
 
 def to_search_list(s):
     return [(f'{lookup}__icontains' if 'exact' not in lookup else lookup) for lookup in str_to_list(s)]
@@ -162,37 +162,72 @@ def to_calendar(value):
     if isinstance(value, dict):
         return value.get('calendar')
 
-def to_relation_dict(value):
-    for k, relation in value.items():
-        if relation is None:
-            value[k] = dict(name=k, fields=[], filters=[], actions={}, related_field=None, aggregations=())
-        elif isinstance(relation, str):
-            value[k] = dict(name=k, fields=str_to_list(relation), filters=[], actions={}, related_field=None, aggregations=())
-        else:
-            relation['actions'] = to_action_list(relation)
-            relation['search'] = to_search_list(relation['search']) if 'search' in relation else []
-            relation['subsets'] = str_to_list(relation['subsets']) if 'subsets' in relation else []
-            relation['aggregations'] = str_to_list(relation['aggregations']) if 'aggregations' in relation else []
-            relation['name'] = relation.get('name', k)
-            relation['related_field'] = relation.get('related_field')
-            for key in ['fields', 'filters']:
-                relation[key] = str_to_list(relation[key]) if key in relation else []
-        if 'id' not in value[k]['fields']:
-            value[k]['fields'].insert(0, 'id')
-        if 'id' not in value[k]['filters']:
-            value[k]['filters'].insert(0, 'id')
-    return value
+def to_relation_dict(k, v):
+    if v is None:
+        relation = dict(name=k, fields=[], filters=[], actions={}, related_field=None, aggregations=())
+    elif isinstance(v, str):
+        relation = dict(name=k, fields=str_to_list(v), filters=[], actions={}, related_field=None, aggregations=())
+    else:
+        relation = {}
+        relation['actions'] = to_action_list(v)
+        relation['search'] = to_search_list(v['search']) if 'search' in v else []
+        relation['subsets'] = str_to_list(v['subsets']) if 'subsets' in v else []
+        relation['aggregations'] = str_to_list(v['aggregations']) if 'aggregations' in v else []
+        relation['name'] = v.get('name', k)
+        relation['related_field'] = v.get('related_field')
+        relation['filters'] = str_to_list(v['filters']) if 'filters' in v else []
+        relation['fields'] = {name: width for name, width in str_to_width_list(v['fields'])}
+        if 'id' not in relation['fields']:
+            relation['fields']['id'] = 100
+    if relation['fields'] and 'id' not in relation['fields']:
+        relation['fields'].insert(0, 'id')
+    if 'id' not in relation['filters']:
+        relation['filters'].insert(0, 'id')
+    return relation
 
-def to_fieldset_dict(value):
-    for k, v in value.items():
-        if isinstance(v, str):
-            value[k] = dict(name=k, fields=str_to_list(v))
+def str_to_width_list(s):
+    s = s.strip().replace('  ', ' ')
+    l = []
+    for l1 in [v.strip() for v in s.split(',')]:
+        if ' ' in l1:
+            l2 = l1.split()
+            for k in l2:
+                l.append((k,  int(100/len(l2))))
         else:
-            v['name'] = k
-            if 'fields' in v:
-                v['fields'] = str_to_list(v['fields'])
-    return value
+            l.append((l1, 100))
+    return l
 
+def to_fieldset_dict(data):
+    fieldsets = {}
+    if isinstance(data, str):
+        fieldsets[''] = dict(name='', fields={name: width for name, width in str_to_width_list(data)}, requires=None, actions=[])
+    else:
+        metadata = data.get('fieldsets', data.get('fields', {}))
+        if isinstance(metadata, str):
+            fieldsets[''] = dict(name='', fields={name: width for name, width in str_to_width_list(metadata)}, requires=None, actions=[])
+        elif metadata:
+            for k, v in metadata.items():
+                if k.startswith('get_') or '.' in k:
+                    fieldsets[k] = to_relation_dict(k, v)
+                else:
+                    if isinstance(v, str):
+                        fieldsets[k] = dict(name=k, fields={name: width for name, width in str_to_width_list(v)}, requires=None, actions=[])
+                    else:
+                        fieldsets[k] = dict(name=k, fields={name: width for name, width in str_to_width_list(v['fields'])}, requires=v.get('requires'), actions=str_to_list(v.get('actions')))
+    return fieldsets
+
+def to_menu_items(menu, items):
+    for item in items:
+        if isinstance(item, dict):
+            for k, v in item.items():
+                if v:
+                    subitem = dict(label=k, children=[])
+                    to_menu_items(subitem['children'], v)
+                    menu.append(subitem)
+        else:
+            subitem = dict(endpoint=item)
+            menu.append(subitem)
+    return menu
 
 def to_lookups_dict(value):
     if isinstance(value, dict):

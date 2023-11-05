@@ -116,7 +116,15 @@ class QuerySet(models.QuerySet):
             self.metadata.update(**metadata)
         filters = self.metadata.get('filters', ())
         for lookup in filters:
-            if lookup in request.GET:
+            if lookup.endswith('userrole'):
+                from api.models import Role
+                rolename = request.GET.get('userrole')
+                if rolename:
+                    self = self.filter(
+                        **{'{}__in'.format(lookup[0:-10]):
+                        Role.objects.filter(name=rolename).values_list('username', flat=True)}
+                    )
+            elif lookup in request.GET:
                 self = self.apply_filter(lookup, request.GET[lookup])
         search = self.metadata.get('search', ())
         if search and 'q' in request.GET:

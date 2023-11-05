@@ -249,7 +249,14 @@ API_YML = '''api:
       endpoints:
         list:
           fields: id, name
-          actions: view, edit
+          actions: view, edit 
+  menu:
+    - api.endpoints.dashboard
+    - Sistema [gear]:
+        - api.endpoints.icons
+        - Gerenciamento:
+            - auth.user
+            - api.role
 '''
 
 def startproject():

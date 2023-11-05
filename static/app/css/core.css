@@ -31,6 +31,7 @@ body{
     font-family: Rawline, Raleway, sans-serif;
     font-size: 14px;
     margin: 0;
+    overflow-x: hidden;
 }
 a{
     color: var(--primary-color);
@@ -154,6 +155,61 @@ a:hover, a:visited{
     text-transform: uppercase;
     height: 70px;
 }
+.sidemenu li i.fa-chevron-down, .sidemenu li i.fa-chevron-up{
+    float: right;
+}
+.main .menu a{
+    text-decoration: none;
+}
+.main .menu{
+    display: inline-block;
+    vertical-align: top;
+}
+.main .menu.compact{
+    position: absolute;
+    background-color: white;
+}
+.main .menu.compact.visible {
+    margin-left: 0px;
+}
+.main .menu.compact.visible ~ div{
+   margin-left: 300px;
+}
+
+.main .container.compact{
+    width: calc(100% - 320px);
+}
+.main .container{
+    display: inline-block;
+    width: 100%;
+}
+.sidemenu li{
+    width: 300px;
+    list-style: none;
+}
+.sidemenu ul{
+    padding: 0px;
+}
+.sidemenu li > a{
+    display: block;
+    width: 300px;
+    padding: 20px;
+}
+.sidemenu li.level0{
+    border-bottom: solid 1px #DDD;
+}
+.sidemenu li.level1, .sidemenu li.level2, .sidemenu li.level3{
+    background-color: #f7f8f8;
+}
+.sidemenu li.level1 a:hover, .sidemenu li.level2 a:hover, .sidemenu li.level3 a:hover{
+    background-color: #d6ddee;
+}
+.sidemenu li.visible > ul{
+    display: block;
+}
+.sidemenu li > ul{
+    display: none;
+}
 .table{
     width: 100%;
     border-spacing: 0px;
@@ -169,6 +225,9 @@ a:hover, a:visited{
     color: var(--primary-color);
     text-align: left;
     padding: 10px;
+}
+.table tbody td.inactive{
+    opacity: 40%;
 }
 .table tbody td{
     border-bottom: solid 1px #DDD;
@@ -198,6 +257,23 @@ a:hover, a:visited{
     border-bottom: solid 1px #FFF;
     border-left: solid 1px #FFF;
     border-right: solid 1px #FFF;
+}
+.table-wrapper .batchActions .btn.primary:hover{
+    border-color: white;
+}
+.table-wrapper .batchActions i{
+    color: white;
+}
+.table-wrapper .batchActions .counter{
+    color: white;
+    padding-top: 15px;
+}
+.table-wrapper .batchActions{
+    width: 100%;
+    background-color: var(--primary-color);
+    text-align: left;
+    padding: 10px;
+    display: block;
 }
 .subsets{
     width: 100%;
@@ -350,6 +426,9 @@ a:hover, a:visited{
 .header .title{
     font-size: 1.5rem;
 }
+.header .title i{
+    font-size: 80%;
+}
 .header .subtitle{
     font-size: 1.1rem;
 }
@@ -479,10 +558,6 @@ a:hover, a:visited{
     color: white;
 }
 
-.batchActions .btn.primary:hover{
-    border-color: white;
-}
-
 .btn.secondary{
     color: var(--primary-color);
     background-color: white;
@@ -554,18 +629,27 @@ i.clickable:hover{
     margin: 0px;
     color: #333;
 }
+.viewer .fields .field{
+    display: inline-block;
+}
 .viewer .field{
     margin-left: 10px;
     margin-bottom: 10px;
 }
-
-.grid-container {
-
+.viewer .field.w100{
+    width: 100%;
 }
-
-.viewer .fieldset .fields{
-    display: grid;
-    /** grid-template-columns: auto auto auto; **/
+.viewer .field.w50{
+    width: 48%;
+}
+.viewer .field.w33{
+    width: 31%;
+}
+.viewer .field.w25{
+    width: 23.5%;
+}
+.viewer.mobile .field{
+    width: 100%;
 }
 .viewer .fieldset .field{
     white-space: pre-line;
@@ -696,6 +780,9 @@ input[type="radio"]:checked::before {
 .queryset .calendar table td .total{
     padding: 10px;
     text-align: center;
+}
+.queryset .batchActions .btn.primary:hover{
+    border-color: white;
 }
 .queryset .batchActions i{
     color: white;
@@ -873,7 +960,11 @@ select {color: #757575;}
 .filter .autocomplete-items{
     position: absolute;
 }
-.form .form-group{display: inline-block; padding: 5px;}
+.form .form-group{
+    display: inline-block;
+    padding: 5px;
+    vertical-align: top;
+}
 .form .form-group.w100{ width: 100%; }
 .form .form-group.w50{ width: 49.8%; }
 .form .form-group.w33{ width: 33.1%;}

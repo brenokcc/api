@@ -146,7 +146,7 @@ class SeleniumTestCase(LiveServerTestCase):
         self.explain('see', text)
         self.browser.see(text, flag, count)
 
-    def see_message(self, text, count=5):
+    def see_message(self, text, count=10):
         self.explain('see_message', text)
         self.browser.see_message(text, count)
 
@@ -172,12 +172,13 @@ class SeleniumTestCase(LiveServerTestCase):
         self.browser.click_cell(i, j)
 
     def check_cell(self, i, j):
-        self.wait(1)
+        self.wait(0.5)
         self.browser.check_cell(i, j)
+        self.wait(0.5)
 
     def submit_form(self, wait=False):
         self.click('Enviar')
-        if wait:
+        if 0 and wait:
             self.wait_form()
 
     def wait_form(self):

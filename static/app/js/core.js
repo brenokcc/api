@@ -1,4 +1,5 @@
 var reloadable = null;
+var messageTimeout = null
 
 document.addEventListener("DOMContentLoaded", function(e) {
 
@@ -35,8 +36,10 @@ function request(method, url, callback, data){
             if(contentType=='application/json'){
                 var data = JSON.parse(result||'{}');
                 if(data.token){
+                    localStorage.removeItem("application");
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', data.user.username);
+
                 }
                 if(data.redirect){
                     if(data.message) setCookie('message', data.message);
@@ -181,6 +184,10 @@ function getCookie(cname) {
   return "";
 }
 function hideMessage(){
+    if(messageTimeout){
+        clearTimeout(messageTimeout);
+        messageTimeout = null;
+    }
     var feedback = document.querySelector(".notification");
     if(feedback) feedback.style.display='none';
 }
@@ -194,5 +201,5 @@ function showMessage(text, style){
     feedback.classList.remove('info');
     feedback.classList.add(style||'success');
     feedback.style.display='block';
-    setTimeout(function(){feedback.style.display='none';}, 5000);
+    messageTimeout = setTimeout(function(){feedback.style.display='none';}, 5000);
 }

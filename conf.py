@@ -63,7 +63,7 @@ SWAGGER_SETTINGS = {
       'clientSecret': os.environ.get('OAUTH2_CLIENT_SECRET', ''),
       'appName': 'OAUTH2'
    },
-   'DEFAULT_AUTO_SCHEMA_CLASS': 'api.viewsets.AutoSchema',
+   'DEFAULT_AUTO_SCHEMA_CLASS': 'api.doc.AutoSchema',
 }
 
 LOGGING_ = {

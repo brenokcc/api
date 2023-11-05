@@ -34,6 +34,10 @@ class Role(models.Model):
 
     objects = RoleQuerySet()
 
+    class Meta:
+        verbose_name = 'Papel'
+        verbose_name_plural = 'Papéis'
+
     def __str__(self):
         return self.get_description()
 

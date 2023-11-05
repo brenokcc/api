@@ -267,7 +267,13 @@ class Browser(webdriver.Firefox):
     def see_message(self, text, count=4):
         self.print('See message "{}"'.format(text))
         try:
-            pass
+            elements = self.find_elements(By.CLASS_NAME, 'notification')
+            if elements:
+                texts = [element.text for element in elements]
+            else:
+                texts = []
+            if text not in texts:
+                raise WebDriverException()
         except WebDriverException as e:
             if count:
                 self.wait()

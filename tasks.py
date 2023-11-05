@@ -20,7 +20,7 @@ class Task:
         self.sleep(1)
 
     def save(self):
-        cache.set(self.key, dict(progress=self.progress, error=self.error, file_path=self.file_path), timeout=10)
+        cache.set(self.key, dict(progress=self.progress, error=self.error, file_path=self.file_path), timeout=30)
 
     def next(self):
         self.partial += 1

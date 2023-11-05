@@ -5,17 +5,20 @@ from django.views.static import serve
 from .specification import API
 
 
+def add_cors_headers(response):
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Headers"] = "*"
+    response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE, PATCH";
+    response["Access-Control-Max-Age"] = "600"
+    return response
+
+
 class CorsMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        response = self.get_response(request)
-        response["Access-Control-Allow-Origin"] = "*"
-        response["Access-Control-Allow-Headers"] = "*"
-        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE, PATCH";
-        response["Access-Control-Max-Age"] = "600"
-        return response
+        return add_cors_headers(self.get_response(request))
 
 
 class ReactJsMiddleware:
@@ -27,6 +30,10 @@ class ReactJsMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.method == 'OPTIONS':
+            response = HttpResponse()
+            response["Cache-Control"] = "public,max-age=600"
+            return add_cors_headers(response)
 
         if ReactJsMiddleware.INDEX_FILE_CONTENT is None:
             specification = API.instance()
@@ -46,20 +53,19 @@ class ReactJsMiddleware:
         if request.path in ('/favicon.ico' , '/apple-touch-icon-120x120-precomposed.png', '/apple-touch-icon-120x120.png', '/apple-touch-icon.png', '/apple-touch-icon.png', '/apple-touch-icon-precomposed.png'):
             return HttpResponseRedirect(ReactJsMiddleware.ICON_URL)
 
-        is_opt = request.method == 'OPTIONS'
         is_api = request.path == '/' or request.path.startswith('/api/v1/')
         is_json = request.META.get('HTTP_ACCEPT') == 'application/json'
         is_raw = 'raw' in request.GET
-
-        if is_api and not is_opt and not is_json and not is_raw:
+        if is_api and not is_json and not is_raw:
             response = HttpResponse(ReactJsMiddleware.INDEX_FILE_CONTENT)
         else:
             response = self.get_response(request)
 
-        if request.path.endswith('/') and not is_opt:
-            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        if request.path.endswith('/'):
+            response["Cache-Control"] = "max-age=600"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
+            add_cors_headers(response)
         return response
 
     @staticmethod
