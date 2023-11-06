@@ -2,6 +2,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import re_path
 from django.conf import settings
 from django.views.static import serve
+from uuid import uuid1
 from .specification import API
 
 
@@ -41,6 +42,7 @@ class ReactJsMiddleware:
             replaces = [
                 ('<!--', ''), ('-->', ''),
                 ('http://localhost:8000', host_url),
+                ('90b273be7c8711eeb74b2a8c307b6d2d', uuid1().hex),
                 ('/static/images/icon.png', specification.icon)
             ]
             ReactJsMiddleware.ICON_URL = specification.icon

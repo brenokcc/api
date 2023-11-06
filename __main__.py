@@ -190,6 +190,7 @@ Delete: Excluir
 View: Visualizar
 Edit: Editar
 Groups: Grupos
+Append: Adicionar
 First Name: Primeiro Nome
 '''
 
@@ -281,7 +282,7 @@ def startproject():
     models_path = os.path.join(name, 'models.py')
     with open(models_path, 'w') as file:
         file.write(MODELS_FILE_CONTENT)
-    actions_path = os.path.join(name, 'actions.py')
+    actions_path = os.path.join(name, 'endpoints.py')
     with open(actions_path, 'w') as file:
         file.write(ACTIONS_FILE_CONTENT)
     tasks_path = os.path.join(name, 'tasks.py')

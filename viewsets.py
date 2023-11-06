@@ -621,7 +621,7 @@ def create_relation_func(func_name, relation):
 
         if request.method == 'GET':
             serializer.is_valid()
-            name = '{}_{}'.format('Adicionar', related_model(self.model, relation['name'])._meta.verbose_name)
+            name = '{}_{}'.format('Adicionar', getattr(instance, relation['name'])().model._meta.verbose_name)
             form = dict(type='form', method='post', name=name, action=request.path, fields=serialize_fields(serializer))
             return Response(form)
 
@@ -674,7 +674,7 @@ for k, item in specification.items.items():
     model = apps.get_model(k)
     for name, relation in item.relations.items():
         if '.' not in name and relation['actions']:
-            subitem = specification.getitem(related_model(model, name))
+            subitem = specification.getitem(getattr(model(pk=0), name)().model)
             for name in relation['actions']:
                 subitem.actions.add(name)
     for name in item.list_actions:

@@ -198,7 +198,7 @@ class PaginableManyRelatedField(relations.ManyRelatedField):
         self.relation = item.relations.get(self.source_attrs[0])
         self.child_relation.relation_name = self.source_attrs[0]
         queryset = super().get_attribute(instance)
-        if isinstance(queryset, models.QuerySet):
+        if isinstance(queryset, models.QuerySet) or hasattr(queryset, 'all'):
             self.paginator = RelationPageNumberPagination()
             if self.context['view'].action == 'retrieve' or self.source_attrs[0] == self.context['request'].GET.get('only'):
                 for backend in list(self.context['view'].filter_backends):

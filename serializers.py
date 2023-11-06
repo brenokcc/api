@@ -57,6 +57,8 @@ def serialize_fields(serializer, fieldsets=None):
             extra.update(choices=choices)
             if (getattr(field, 'pick', False)):
                 extra.update(pick=True)
+            else:
+                choices.insert(0, dict(id='', text=''))
         elif isinstance(field, ManyRelatedField):
             field_type = 'select'
             extra.update(multiple=True)
