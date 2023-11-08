@@ -31,10 +31,6 @@ class ReactJsMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.method == 'OPTIONS':
-            response = HttpResponse()
-            response["Cache-Control"] = "public,max-age=600"
-            return add_cors_headers(response)
 
         if ReactJsMiddleware.INDEX_FILE_CONTENT is None:
             specification = API.instance()
@@ -55,16 +51,17 @@ class ReactJsMiddleware:
         if request.path in ('/favicon.ico' , '/apple-touch-icon-120x120-precomposed.png', '/apple-touch-icon-120x120.png', '/apple-touch-icon.png', '/apple-touch-icon.png', '/apple-touch-icon-precomposed.png'):
             return HttpResponseRedirect(ReactJsMiddleware.ICON_URL)
 
+        is_opt = request.method == 'OPTIONS'
         is_api = request.path == '/' or request.path.startswith('/api/v1/')
         is_json = request.META.get('HTTP_ACCEPT') == 'application/json'
         is_raw = 'raw' in request.GET
-        if is_api and not is_json and not is_raw:
+        if is_api and not is_json and not is_raw and not is_opt:
             response = HttpResponse(ReactJsMiddleware.INDEX_FILE_CONTENT)
         else:
             response = self.get_response(request)
 
         if request.path.endswith('/'):
-            response["Cache-Control"] = "max-age=600"
+            response["Cache-Control"] = "max-age=0"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
             add_cors_headers(response)

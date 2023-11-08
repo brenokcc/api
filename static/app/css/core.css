@@ -119,6 +119,57 @@ a:hover, a:visited{
 .login-form .form-group.token{
     display: none;
 }
+.steps-wrapper{
+    overflow-x: auto;
+    white-space: nowrap;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+.steps-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+
+.steps{
+    width: 100%;
+    text-align: center;
+}
+.steps .step{
+    list-style: none;
+    display: inline-block;
+    width: 150px;
+}
+.steps .step:not(:last-child) .icon::after {
+  content: " ";
+  display: block;
+  height: 2px;
+  background: var(--primary-color);
+  width: 150px;
+  margin-left: 46px;
+  margin-top: -15px;
+}
+.steps .step .icon{
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    color: white;
+    vertical-align: middle;
+    text-align: center;
+    margin:auto;
+    border: solid 2px var(--primary-color);
+    font-size: 1.7rem;
+}
+.steps .step .icon.active{
+    background-color: var(--primary-color);
+}
+.steps .step .icon.inactive{
+    background-color: white;
+    color: var(--primary-color);
+}
+.steps .step .text{
+    padding: 5px;
+}
 .boxes{
     padding: 20px;
     margin-left: -20px;

@@ -102,6 +102,9 @@ def serialize_fields(serializer, fieldsets=None):
             elif field.style.get('input_type'):
                 field_type = field.style.get('input_type')
 
+            if 'senha' in name or 'password' in name:
+                field_type = 'password'
+
         field = dict(name=name, type=field_type, label=field.label, value=value, help_text=field.help_text, read_only=field.read_only, required=field.required and not field.read_only)
 
         field.update(extra)
@@ -151,7 +154,7 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
         paginator = PageNumberPagination()
         queryset = paginator.paginate_queryset(value, context['request'], context['view'], relation_name)
         fields = output.get('fields') if output else value.metadata.get('fields')
-        meta = dict(model=value.model, fields=fields or '__all__')
+        meta = dict(model=value.model, fields=fields)
         serializer = DynamicFieldsModelSerializer(
             queryset, many=True, read_only=True, context=context, meta=meta, is_relation=is_relation
         )
@@ -330,7 +333,7 @@ class FieldsetField(serializers.DictField):
             else:
                 api_attr_name = attr_name
                 attr_value = getattr(value, attr_name)
-            if (isinstance(attr_value, models.Manager) or isinstance(value, models.QuerySet)):
+            if (isinstance(attr_value, models.Manager) or isinstance(attr_value, models.QuerySet) or hasattr(attr_value, 'all')):
                 attr_value = [str(obj) for obj in attr_value.all()]
             data[api_attr_name] = serialize_value(attr_value, self.context)
         return data
@@ -346,7 +349,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     def __init__(self, *args, is_relation=False, **kwargs):
         meta = kwargs.pop('meta', None)
         if meta:
-            self.Meta = type("Meta", (), dict(model=meta['model'], fields=[k for k in meta['fields']]))
+            self.Meta = type("Meta", (), dict(model=meta['model'], fields=[k for k in meta['fields']] or '__all__'))
         self.item  = specification.items[
             '{}.{}'.format(self.Meta.model._meta.app_label, self.Meta.model._meta.model_name)
         ]
@@ -419,7 +422,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 source='*', fieldset=fieldset, request=self.context['request'],
                 help_text='Returns {}'.format(fieldset['fields'])
             )
-
         super().build_unknown_field(field_name, model_class)
 
     def to_representation(self, instance):
@@ -468,4 +470,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             for action in representation['actions']:
                 action['url'] = action['url'].format(id=instance.id)
             #for k, v in representation.items(): print(k, v)
+        else:
+            if set(representation.keys()) == {'', 'id'}:
+                representation = representation['']
         return representation

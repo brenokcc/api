@@ -23,6 +23,10 @@ if 'drf_yasg' in settings.INSTALLED_APPS:
    def apidoc(**kwargs):
       def decorate(function):
          manual_parameters = [parameter_mapping[name] for name in kwargs.pop('parameters', ())]
+         for name, field in kwargs.pop('query_fields', {}).items():
+            manual_parameters.append(
+               openapi.Parameter(name, openapi.IN_QUERY, description=field.help_text or name, type=openapi.TYPE_STRING)
+            )
          for name in kwargs.pop('filters', ()):
             name = 'userrole' if name.endswith('userrole') else name
             manual_parameters.append(

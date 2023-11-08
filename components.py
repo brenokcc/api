@@ -84,10 +84,31 @@ class Table(dict):
         self['rows'] = rows
         self['pagination'] = pagination
 
-
 class TemplateContent(dict):
     def __init__(self, name, context):
         self['type'] = 'html'
         self['content'] = render_to_string(name, context)
 
+class Banner(dict):
+    def __init__(self, src):
+        self['type'] = 'banner'
+        self['src'] = src
 
+class Map(dict):
+    def __init__(self, latitude, longitude, width='100%', height=400):
+        self['type'] = 'map'
+        self['latitude'] = str(latitude)
+        self['longitude'] = str(longitude)
+        self['width'] = width
+        self['height'] = height
+
+
+class Steps(dict):
+    def __init__(self, icon=None):
+        self['type'] = 'steps'
+        self['icon'] = icon
+        self['steps'] = []
+
+    def append(self, name, done):
+        number = len(self['steps']) + 1
+        self['steps'].append(dict(number=number, name=name, done=done))

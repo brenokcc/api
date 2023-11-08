@@ -25,6 +25,7 @@ from .tasks import TaskRunner
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.cache import cache
 from django.conf import settings
+from django.contrib import auth
 from django.http import HttpResponse, FileResponse
 from django.db.models import QuerySet
 from . import permissions
@@ -44,9 +45,14 @@ FileField = serializers.FileField
 DecimalField = serializers.DecimalField
 EmailField = serializers.EmailField
 ManyRelatedField = serializers.ManyRelatedField
+HiddenField = serializers.HiddenField
 
 
 class TextField(serializers.CharField):
+    pass
+
+
+class QueryField(HiddenField):
     pass
 
 
@@ -156,7 +162,6 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         modal = True
         sync = True
         fieldsets = {}
-        target = None
 
     def __init__(self, *args, **kwargs):
         self.user_task = None
@@ -177,6 +182,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                 data = request.GET or request.data or None
 
         super().__init__(data=data, *args, **kwargs)
+        for name in [k for k, v in self.fields.items() if type(v) == QueryField]:
+            del self.fields[name]
 
     @classmethod
     def get_icon(cls):
@@ -184,7 +191,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     @classmethod
     def get_target(cls):
-        return cls.metadata('target', None)
+        return cls.metadata('target', 'view')
 
     @classmethod
     def get_name(cls):
@@ -208,11 +215,19 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     @classmethod
     def get_api_methods(cls):
-        return ['get'] if cls.is_action_view() and not cls._declared_fields else ['get', 'post']
+        return ['get'] if cls.is_action_view() and not cls.get_form_fields() else ['get', 'post']
 
     @classmethod
     def is_action_view(cls):
         return cls.get != Endpoint.get
+
+    @classmethod
+    def get_query_fields(cls):
+        return {name: field for name, field in cls._declared_fields.items() if isinstance(field, QueryField)}
+
+    @classmethod
+    def get_form_fields(cls):
+        return {name: field for name, field in cls._declared_fields.items() if not isinstance(field, QueryField)}
 
     def get_help_text(self):
         return self.metadata('help_text')
@@ -252,6 +267,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                 value = self.request.GET[name]
             elif name in self.request.POST:
                 value = self.request.POST[name]
+            elif name in self.request.data:
+                value = self.request.data[name]
         return self.get_internal_value(name, value, default=default)
 
     def get_internal_value(self, name, value, default=None):
@@ -465,6 +482,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                         return FileResponse(result)
                 except JsonResponseReadyException as e:
                     return Response(e.data)
+                except ValidationError as e:
+                    return Response({'non_field_errors': e.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
                 except Exception as e:
                     traceback.print_exc()
                     return Response({'non_field_errors': 'Ocorreu um erro no servidor ({}).'.format(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -559,6 +578,68 @@ class Icons(Endpoint):
 
     def check_permission(self):
         return self.user.is_superuser
+
+
+class Login(Endpoint):
+    username = CharField(label='Nome do usuário')
+    password = CharField(label='Senha')
+
+    def oauth(self, code):
+        specification = API.instance()
+        for name, provider in specification.oauth.items():
+            redirect_uri = "{}{}".format(self.request.META['HTTP_ORIGIN'], provider['redirect_uri'])
+            access_token_request_data = dict(
+                grant_type='authorization_code', code=code, redirect_uri=redirect_uri,
+                client_id=provider['client_id'], client_secret=provider['client_secret']
+            )
+            response = requests.post(provider['access_token_url'], data=access_token_request_data, verify=False)
+            if response.status_code != 200:
+                print('Logging with {} failed: {}'.format(name, response.text))
+                continue
+            data = json.loads(response.text)
+            headers = {
+                'Authorization': 'Bearer {}'.format(data.get('access_token')),
+                'x-api-key': provider['client_secret']
+            }
+            if provider.get('user_data_method', 'GET').upper() == 'POST':
+                response = requests.post(provider['user_data_url'], data={'scope': data.get('scope')}, headers=headers)
+            else:
+                response = requests.get(provider['user_data_url'], data={'scope': data.get('scope')}, headers=headers)
+            if response.status_code == 200:
+                data = json.loads(response.text)
+                username = data[provider['user_data']['username']]
+                user = User.objects.filter(username=username).first()
+                if user is None and provider.get('user_data').get('create'):
+                    user = User.objects.create(
+                        username=username,
+                        email=data[provider['user_data']['email']] if provider['user_data']['mail'] else ''
+                    )
+                if user:
+                    token = Token.objects.get_or_create(user=user)[0]
+                    data = {'token': token.key}
+                    self.update(token, data)
+                    return Response(data)
+                else:
+                    message = 'Usuário "{}" inexistente.'.format(username)
+                    return Response(dict(type='info', text=message))
+        return Response(dict(type='info', text='Ocorreu um erro ao realizar login.'))
+
+
+    def post(self):
+        username = self.getdata('username')
+        password = self.getdata('password')
+        user = self.objects('auth.user').filter(username=username).first()
+        if not auth.authenticate(username=username, password=password):
+            raise ValidationError('Usuário não autenticado.')
+        token = Token.objects.get_or_create(user=user)[0]
+        return dict(
+            token=token.key, user=dict(id=user.id, username=user.username, is_superuser=user.is_superuser),
+            redirect='/api/v1/dashboard/', message='Autenticação realizada com sucesso.'
+        )
+
+
+    def check_permission(self):
+        return True
 
 
 class Logout(Endpoint):

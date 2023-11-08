@@ -16,7 +16,7 @@ from rest_framework import filters
 from rest_framework import routers
 from rest_framework import serializers, viewsets
 from rest_framework import status
-from rest_framework.authtoken.views import ObtainAuthToken
+
 from rest_framework.authtoken.models import Token
 from rest_framework.compat import coreapi, coreschema
 from rest_framework.decorators import action
@@ -32,72 +32,6 @@ from .serializers import *
 from .specification import API
 from .utils import to_snake_case, related_model, as_choices, to_choices
 from .doc import apidoc
-
-
-class ObtainAuthToken(ObtainAuthToken):
-
-    def oauth(self, code):
-        specification = API.instance()
-        for name, provider in specification.oauth.items():
-            redirect_uri = "{}{}".format(self.request.META['HTTP_ORIGIN'], provider['redirect_uri'])
-            access_token_request_data = dict(
-                grant_type='authorization_code', code=code, redirect_uri=redirect_uri,
-                client_id=provider['client_id'], client_secret=provider['client_secret']
-            )
-            response = requests.post(provider['access_token_url'], data=access_token_request_data, verify=False)
-            if response.status_code != 200:
-                print('Logging with {} failed: {}'.format(name, response.text))
-                continue
-            data = json.loads(response.text)
-            headers = {
-                'Authorization': 'Bearer {}'.format(data.get('access_token')),
-                'x-api-key': provider['client_secret']
-            }
-            if provider.get('user_data_method', 'GET').upper() == 'POST':
-                response = requests.post(provider['user_data_url'], data={'scope': data.get('scope')}, headers=headers)
-            else:
-                response = requests.get(provider['user_data_url'], data={'scope': data.get('scope')}, headers=headers)
-            if response.status_code == 200:
-                data = json.loads(response.text)
-                username = data[provider['user_data']['username']]
-                user = User.objects.filter(username=username).first()
-                if user is None and provider.get('user_data').get('create'):
-                    user = User.objects.create(
-                        username=username,
-                        email=data[provider['user_data']['email']] if provider['user_data']['mail'] else ''
-                    )
-                if user:
-                    token = Token.objects.get_or_create(user=user)[0]
-                    data = {'token': token.key}
-                    self.update(token, data)
-                    return Response(data)
-                else:
-                    message = 'Usuário "{}" inexistente.'.format(username)
-                    return Response(dict(type='info', text=message))
-        return Response(dict(type='info', text='Ocorreu um erro ao realizar login.'))
-
-
-    def get(self, request, *args, **kwargs):
-        code = self.request.GET.get('code')
-        if code:
-            return self.oauth(code)
-        serializer = self.get_serializer()
-        form = dict(type='form', method='post', name='login', action=request.path, fields=serialize_fields(serializer))
-        return Response(form)
-
-    def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        response['Access-Control-Expose-Headers'] = '*'
-        if response.status_code == 200:
-            token = Token.objects.get(key=response.data['token'])
-        self.update(token, response.data)
-        return response
-
-    def update(self, token, data):
-        user = dict(id=token.user.id, username=token.user.username, is_superuser=token.user.is_superuser)
-        data.update(
-            redirect='/api/v1/dashboard/', message='Autenticação realizada com sucesso.', user=user
-        );
 
 
 class Router(routers.DefaultRouter):
@@ -192,6 +126,7 @@ class Edit(Endpoint):
 
     class Meta:
         icon = 'pencil'
+        target = 'instance'
 
     @classmethod
     def get_qualified_name(cls):
@@ -205,6 +140,7 @@ class Delete(Endpoint):
 
     class Meta:
         icon = 'trash'
+        target = 'instance'
 
     @classmethod
     def get_qualified_name(cls):
@@ -219,6 +155,7 @@ class View(Endpoint):
     class Meta:
         icon = 'eye'
         modal = False
+        target = 'instance'
 
     @classmethod
     def get_qualified_name(cls):
@@ -234,6 +171,7 @@ class Preview(View):
     class Meta:
         icon = 'eye'
         modal = True
+        target = 'instance'
 
     @classmethod
     def get_qualified_name(cls):
@@ -288,6 +226,8 @@ class ModelViewSet(viewsets.ModelViewSet):
                     _fields = self.item.list_display
                 elif self.action == 'retrieve':
                     _fields = [k[4:] if k.startswith('get_') else k for k in self.item.view_fields.keys()]
+                    if 'id' not in _fields:
+                        _fields.insert(0, 'id')
                 elif self.action == 'update' or self.action == 'partial_update':
                     _fields = []
                     for fieldset in (self.item.edit_fieldsets or self.item.add_fieldsets).values():
@@ -473,7 +413,7 @@ class UserViewSet(viewsets.GenericViewSet):
                 k = serializer_cls.get_api_name()
                 methods = serializer_cls.get_api_methods()
                 function = create_action_view_func(serializer_cls)
-                apidoc(parameters=(['choices_field', 'choices_search'] if serializer_cls._declared_fields else []))(function)
+                apidoc(parameters=(['choices_field', 'choices_search'] if serializer_cls._declared_fields else []), query_fields=serializer_cls.get_query_fields())(function)
                 action(detail=False, methods=methods, url_path=f'user/{k}', url_name=k, name=k)(function)
                 setattr(cls, k, function)
 
@@ -494,11 +434,11 @@ class ActionViewSet(viewsets.GenericViewSet):
     @classmethod
     def create_actions(cls):
         for action_class in ACTIONS.values():
-             if action_class.get_target() is None:
+             if action_class.get_target() == 'view' and action_class.__name__ not in ['Endpoint', 'EndpointSet']:
                 k = action_class.get_api_name()
                 methods = action_class.get_api_methods()
                 function = create_action_view_func(action_class)
-                apidoc(tags=action_class.get_api_tags(), parameters=(['choices_field', 'choices_search'] if 'post' in methods else []))(function)
+                apidoc(tags=action_class.get_api_tags(), parameters=(['choices_field', 'choices_search'] if 'post' in methods else []), query_fields=action_class.get_query_fields())(function)
                 action(detail=False, methods=methods, url_path=k, url_name=k, name=k)(function)
                 setattr(cls, k, function)
                 cls.ACTIONS[k] = action_class
@@ -555,7 +495,7 @@ def model_view_set_factory(model_name):
         k = cls.get_api_name()
         url_path = k
         function = create_action_func(cls)
-        method = 'post' if cls._declared_fields else 'get'
+        method = 'post' if cls.get_form_fields() else 'get'
         methods = ['post', 'get'] if specification.app else [method]
         parameters = ['only_fields', 'choices_field', 'choices_search']
         if cls.get_target() == 'instances' or cls.get_target() == 'queryset':
@@ -566,7 +506,7 @@ def model_view_set_factory(model_name):
         else:
             detail = True
             parameters.append('id_parameter')
-        apidoc(parameters=parameters)(function)
+        apidoc(parameters=parameters, query_fields=cls.get_query_fields())(function)
         action(detail=detail, methods=['post', 'get'], url_path=url_path, url_name=k, name=k)(function)
         setattr(ViewSet, k, function)
         ViewSet.ACTIONS[k] = cls
@@ -582,7 +522,7 @@ def model_view_set_factory(model_name):
             cls2 = ACTIONS[qualified_name]
             if cls2.get_target() == 'queryset':
                 k2 = cls2.get_api_name()
-                method = 'post' if cls2._declared_fields else 'get'
+                method = 'post' if cls2.get_form_fields() else 'get'
                 methods = ['post', 'get'] if specification.app else [method]
                 function = create_action_func(cls2, item.relations[k]['name'])
                 apidoc(parameters=['only_fields', 'choices_field', 'choices_search'])(function)
