@@ -238,7 +238,14 @@ class ModelViewSet(viewsets.ModelViewSet):
                 elif self.action == 'destroy':
                     _fields = 'id',
                 elif self.action in self.item.relations:
-                    _exclude = self.item.relations[self.action]['related_field'],
+                    if 'fieldsets' in self.item.relations[self.action]:
+                        _fields = []
+                        for fieldset in self.item.relations[self.action]['fieldsets'].values():
+                            _fields.extend(fieldset['fields'].keys())
+                    elif len(self.item.relations[self.action]['fields'])>1:
+                        _fields = [k[4:] if k.startswith('get_') else k for k in self.item.relations[self.action]['fields']]
+                    else:
+                        _exclude = self.item.relations[self.action]['related_field'],
                     _model = getattr(_model(pk=0), self.action)().model
                 else:
                     _fields = self.item.list_display
@@ -323,9 +330,12 @@ class ModelViewSet(viewsets.ModelViewSet):
     @apidoc(parameters=['choices_field', 'choices_search'])
     def update(self, request, *args, **kwargs):
         permissions.check_roles(self.item.edit_lookups, request.user)
-        return self.choices_response(request) or self.update_form(request) or self.post_update(
-            super().update(request, *args, **kwargs)
-        )
+        try:
+            return self.choices_response(request) or self.update_form(request) or self.post_update(
+                super().update(request, *args, **kwargs)
+            )
+        except ValidationError as e:
+            return Response({'non_field_errors': e.message}, status=status.HTTP_400_BAD_REQUEST)
 
     def post_update(self, response):
         response = Response({}) if specification.app else response
@@ -369,55 +379,6 @@ class ModelViewSet(viewsets.ModelViewSet):
         return Response(choices) if choices is not None else None
 
 
-class UserSerializer(serializers.Serializer):
-
-    def to_representation(self, instance):
-        if instance.is_authenticated:
-            data = dict(
-                id=self.instance.id,
-                username=self.instance.username,
-                roles=[
-                    dict(id=role.id, name=role.get_description(), active=role.active)
-                    for role in Role.objects.filter(username=instance.username)
-                ]
-            )
-            return data
-        return {}
-
-    def check_permission(self):
-        return True
-
-
-class UserViewSet(viewsets.GenericViewSet):
-    permission_classes = AllowAny,
-    ACTIONS = {}
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def get_serializer_class(self):
-        return ACTIONS.get(UserViewSet.ACTIONS.get(self.action), UserSerializer)
-
-    def get_queryset(self):
-        return apps.get_model('auth.user').objects.filter(pk=self.request.user.id)
-
-    @apidoc(parameters=['only_fields'])
-    @action(detail=False, methods=["get"], url_path='user', url_name='user')
-    def user(self, request, format=None):
-        return Response(self.get_serializer(request.user).data, status=status.HTTP_200_OK)
-
-    @classmethod
-    def create_actions(cls):
-        for serializer_cls in ACTIONS.values():
-            if serializer_cls.get_target() == 'user':
-                k = serializer_cls.get_api_name()
-                methods = serializer_cls.get_api_methods()
-                function = create_action_view_func(serializer_cls)
-                apidoc(parameters=(['choices_field', 'choices_search'] if serializer_cls._declared_fields else []), query_fields=serializer_cls.get_query_fields())(function)
-                action(detail=False, methods=methods, url_path=f'user/{k}', url_name=k, name=k)(function)
-                setattr(cls, k, function)
-
-
 class ActionViewSet(viewsets.GenericViewSet):
 
     ACTIONS = {}
@@ -434,28 +395,18 @@ class ActionViewSet(viewsets.GenericViewSet):
     @classmethod
     def create_actions(cls):
         for action_class in ACTIONS.values():
-             if action_class.get_target() == 'view' and action_class.__name__ not in ['Endpoint', 'EndpointSet']:
+             target = action_class.get_target()
+             if target in ('view', 'api', 'user') and action_class.__name__ not in ['Endpoint', 'EndpointSet']:
                 k = action_class.get_api_name()
+                url_path = k
+                if target == 'user':
+                    url_path = 'user' if k == 'user' else f'user/{k}'
                 methods = action_class.get_api_methods()
                 function = create_action_view_func(action_class)
                 apidoc(tags=action_class.get_api_tags(), parameters=(['choices_field', 'choices_search'] if 'post' in methods else []), query_fields=action_class.get_query_fields())(function)
-                action(detail=False, methods=methods, url_path=k, url_name=k, name=k)(function)
+                action(detail=False, methods=methods, url_path=url_path, url_name=k, name=k)(function)
                 setattr(cls, k, function)
                 cls.ACTIONS[k] = action_class
-
-
-class HealthViewSet(viewsets.GenericViewSet):
-    serializer_class = serializers.Serializer
-    permission_classes = AllowAny,
-    http_method_names = ['get']
-
-    def get_queryset(self):
-        return User.objects.none()
-
-    @apidoc(tags=['health'])
-    @action(detail=False, methods=["get"], url_path='check', url_name='check')
-    def check(self, request):
-        return Response({'status': 'UP', 'time': datetime.datetime.now().isoformat()}, status=status.HTTP_200_OK)
 
 
 def model_view_set_factory(model_name):
@@ -561,14 +512,20 @@ def create_relation_func(func_name, relation):
 
         if request.method == 'GET':
             serializer.is_valid()
-            name = '{}_{}'.format('Adicionar', getattr(instance, relation['name'])().model._meta.verbose_name)
-            form = dict(type='form', method='post', name=name, action=request.path, fields=serialize_fields(serializer))
+            relation_model = getattr(instance, relation['name'])().model
+            relation_item = specification.getitem(relation_model)
+            name = '{}_{}'.format('Adicionar', relation_model._meta.verbose_name)
+            fieldsets = relation.get('fieldsets', relation_item.add_fieldsets)
+            form = dict(type='form', method='post', name=name, action=request.path, fields=serialize_fields(serializer, fieldsets))
             return Response(form)
 
         if serializer.is_valid():
             serializer.validated_data[relation['related_field']] = instance
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            try:
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except ValidationError as e:
+                return Response({'non_field_errors': e.message}, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -615,8 +572,9 @@ for k, item in specification.items.items():
     for name, relation in item.relations.items():
         if '.' not in name and relation['actions']:
             subitem = specification.getitem(getattr(model(pk=0), name)().model)
-            for name in relation['actions']:
-                subitem.actions.add(name)
+            if subitem:
+                for name in relation['actions']:
+                    subitem.actions.add(name)
     for name in item.list_actions:
         item.actions.add(name)
     for name in item.view_actions:
@@ -633,12 +591,9 @@ for k, item in specification.items.items():
             m2m_changed.connect(signals.m2m_save_func, sender=getattr(model, field.name).through)
     router.register(item.prefix, model_view_set_factory(k), k)
 
-UserViewSet.create_actions()
 ActionViewSet.create_actions()
 
-router.register('', UserViewSet, 'user')
 router.register('', ActionViewSet, 'api')
-router.register('health', HealthViewSet, 'check')
 
 
 def api_watchdog(sender, **kwargs):

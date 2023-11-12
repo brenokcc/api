@@ -155,6 +155,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: test
+    healthcheck:
+      test: curl -s http://localhost:8000/api/v1/health_check/?raw= | grep status
     volumes:
       - .git:/opt/git
     environment:
@@ -192,6 +194,8 @@ Edit: Editar
 Groups: Grupos
 Append: Adicionar
 First Name: Primeiro Nome
+Append: Adicionar
+Description: Descrição
 '''
 
 API_YML = '''api:

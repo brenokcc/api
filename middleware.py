@@ -65,6 +65,9 @@ class ReactJsMiddleware:
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
             add_cors_headers(response)
+        else:
+            response['Content-Security-Policy'] = "frame-ancestors 'self' *"
+            response["X-Frame-Options"] = "allowall"
         return response
 
     @staticmethod

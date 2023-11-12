@@ -139,6 +139,7 @@ a:hover, a:visited{
     list-style: none;
     display: inline-block;
     width: 150px;
+    vertical-align: top;
 }
 .steps .step:not(:last-child) .icon::after {
   content: " ";
@@ -169,6 +170,7 @@ a:hover, a:visited{
 }
 .steps .step .text{
     padding: 5px;
+    white-space: break-spaces
 }
 .boxes{
     padding: 20px;

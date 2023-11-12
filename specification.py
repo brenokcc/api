@@ -164,9 +164,9 @@ def to_calendar(value):
 
 def to_relation_dict(k, v):
     if v is None:
-        relation = dict(name=k, fields=[], filters=[], actions={}, related_field=None, aggregations=())
+        relation = dict(name=k, fields={}, filters=[], actions={}, related_field=None, aggregations=())
     elif isinstance(v, str):
-        relation = dict(name=k, fields=str_to_list(v), filters=[], actions={}, related_field=None, aggregations=())
+        relation = dict(name=k, fields={name: width for name, width in str_to_width_list(v)}, filters=[], actions={}, related_field=None, aggregations=())
     else:
         relation = {}
         relation['actions'] = to_action_list(v)
@@ -176,25 +176,29 @@ def to_relation_dict(k, v):
         relation['name'] = v.get('name', k)
         relation['related_field'] = v.get('related_field')
         relation['filters'] = str_to_list(v['filters']) if 'filters' in v else []
-        relation['fields'] = {name: width for name, width in str_to_width_list(v['fields'])}
-        if 'id' not in relation['fields']:
-            relation['fields']['id'] = 100
-    if relation['fields'] and 'id' not in relation['fields']:
-        relation['fields'].insert(0, 'id')
+        relation['fields'] = {name: width for name, width in str_to_width_list(v.get('fields'))}
+        if 'fieldsets' in v:
+            relation['fieldsets'] = to_fieldset_dict(v)
+            if not relation['fields']:
+                for item in relation['fieldsets'].values():
+                    relation['fields'].update(item['fields'])
+    if 'id' not in relation['fields']:
+        relation['fields']['id'] = 100
     if 'id' not in relation['filters']:
         relation['filters'].insert(0, 'id')
     return relation
 
 def str_to_width_list(s):
-    s = s.strip().replace('  ', ' ')
     l = []
-    for l1 in [v.strip() for v in s.split(',')]:
-        if ' ' in l1:
-            l2 = l1.split()
-            for k in l2:
-                l.append((k,  int(100/len(l2))))
-        else:
-            l.append((l1, 100))
+    if s:
+        s = s.strip().replace('  ', ' ')
+        for l1 in [v.strip() for v in s.split(',')]:
+            if ' ' in l1:
+                l2 = l1.split()
+                for k in l2:
+                    l.append((k,  int(100/len(l2))))
+            else:
+                l.append((l1, 100))
     return l
 
 def to_fieldset_dict(data):
@@ -212,7 +216,7 @@ def to_fieldset_dict(data):
                 else:
                     if isinstance(v, str):
                         fieldsets[k] = dict(name=k, fields={name: width for name, width in str_to_width_list(v)}, requires=None, actions=[])
-                    else:
+                    elif v:
                         fieldsets[k] = dict(name=k, fields={name: width for name, width in str_to_width_list(v['fields'])}, requires=v.get('requires'), actions=str_to_list(v.get('actions')))
     return fieldsets
 

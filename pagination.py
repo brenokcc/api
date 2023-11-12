@@ -80,10 +80,10 @@ class PageNumberPagination(pagination.PageNumberPagination):
         self.context = dict(request=request, view=view)
         self.subset = request.GET.get('subset')
         self.page_size = min(int(request.GET.get('page_size', 10)), 1000)
+        queryset = queryset.filter()
         queryset = queryset.order_by('id') if not queryset.ordered else queryset
-        key = '{}.{}'.format(self.model._meta.app_label, self.model._meta.model_name)
-        item = specification.items[key]
-        if item.list_calendar:
+        item = specification.getitem(self.model)
+        if item and item.list_calendar:
             queryset, self.calendar = to_calendar(queryset, request, item.list_calendar)
         if self.subset:
             queryset = getattr(queryset, self.subset)()
@@ -122,8 +122,14 @@ class PageNumberPagination(pagination.PageNumberPagination):
             actions.extend(actions_metadata(data, metadata.get('actions', {}), self.context, base_url, self.instances, viewer=metadata.get('viewer')))
             related_field = metadata.get('related_field')
             if related_field:
+                relation_item = specification.getitem(self.model)
+                name = '{}_{}'.format('Adicionar', self.model._meta.verbose_name)
                 url = '{}{}/add/'.format(self.context['request'].path, metadata['name'])
-                actions.append(dict(name='append', url=url, icon='plus', target='queryset', modal=True, ids=[]))
+                if not relation_item.add_fieldsets:
+                    fieldsets = metadata.get('fieldsets')
+                    if fieldsets:
+                        relation_item.add_fieldsets = fieldsets
+                actions.append(dict(name=name, url=url, icon='plus', target='queryset', modal=True, ids=[]))
 
             for name in metadata.get('search', ()):
                 search.append(name)

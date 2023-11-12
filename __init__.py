@@ -1,11 +1,12 @@
 import warnings
 from django.apps import apps
 from django.db import models
-from django.db.models import manager, Q, CharField
+from django.db.models import manager, Q, CharField, ForeignKey, DecimalField, ManyToManyField, CASCADE
 from django.db.models.aggregates import Sum, Avg
 from django.db.models.base import ModelBase
 from .statistics import Statistics
 from functools import reduce
+from datetime import datetime
 import operator
 
 
@@ -57,6 +58,10 @@ class ModelMixin(object):
 
     def valueset(self, *fields, autoreload=0):
         return ValueSet(self, *fields, autoreload=autoreload)
+
+    def get_text(self):
+        return self.__str__()
+
 
 class QuerySet(models.QuerySet):
 
@@ -193,6 +198,43 @@ def __new__(mcs, name, bases, attrs, **kwargs):
     return cls
 
 
+class CharField(CharField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('max_length', 255)
+        super().__init__(*args, **kwargs)
+
+
+class ForeignKey(ForeignKey):
+    def __init__(self, to, on_delete=None, **kwargs):
+        self.addable = kwargs.pop('addable', False)
+        super().__init__(to, on_delete or CASCADE, **kwargs)
+
+
+class ManyToManyField(ManyToManyField):
+    def __init__(self, *args, **kwargs):
+        self.addable = kwargs.pop('addable', False)
+        super().__init__(*args, **kwargs)
+
+
+class OneToManyField(ManyToManyField):
+    def __init__(self, *args, min=1, max=5, **kwargs):
+        self.min = min
+        self.max = max
+        super().__init__(*args, **kwargs)
+
+
+class DecimalField(DecimalField):
+    def __init__(self, *args, **kwargs):
+        kwargs['decimal_places'] = kwargs.pop('decimal_places', 2)
+        kwargs['max_digits'] = kwargs.pop('max_digits', 9)
+        super().__init__(*args, **kwargs)
+
+
 ModelBase.__new__ = __new__
 models.QuerySet = QuerySet
 models.Manager = Manager
+models.CharField = CharField
+models.ForeignKey = ForeignKey
+models.OneToManyField = OneToManyField
+models.ManyToManyField = ManyToManyField
+models.DecimalField = DecimalField

@@ -1,6 +1,15 @@
 from django.template.loader import render_to_string
 
 
+class Image(dict):
+    def __init__(self, src, width=200, height=200, round=False):
+        self['type'] = 'image'
+        self['src'] = src
+        self['width'] = width
+        self['height'] = height
+        self['round'] = False
+
+
 class Link(dict):
     def __init__(self, url, target='_blank', icon=None):
         self['type'] = 'link'
@@ -111,4 +120,4 @@ class Steps(dict):
 
     def append(self, name, done):
         number = len(self['steps']) + 1
-        self['steps'].append(dict(number=number, name=name, done=done))
+        self['steps'].append(dict(number=number, name=name, done=bool(done)))

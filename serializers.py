@@ -13,7 +13,7 @@ from rest_framework.serializers import RelatedField, ManyRelatedField, ChoiceFie
 
 from . import ValueSet
 from . import permissions
-from .components import Link
+from .components import Link, Image
 from .utils import to_snake_case, to_choices
 from .endpoints import ACTIONS, actions_metadata, TextField
 from .pagination import PageNumberPagination, PaginableManyRelatedField
@@ -30,7 +30,7 @@ MASKS = dict(
 )
 
 def serialize_fields(serializer, fieldsets=None):
-    l = []
+    allfields = {}
     instance = serializer.instance if isinstance(serializer, ModelSerializer) else None
     for name, field in serializer.fields.items():
         if name == 'id': continue
@@ -104,11 +104,13 @@ def serialize_fields(serializer, fieldsets=None):
 
             if 'senha' in name or 'password' in name:
                 field_type = 'password'
+            if name == 'cor':
+                field_type = 'color'
 
         field = dict(name=name, type=field_type, label=field.label, value=value, help_text=field.help_text, read_only=field.read_only, required=field.required and not field.read_only)
 
         field.update(extra)
-        l.append(field)
+        allfields[name] = field
 
     if fieldsets:
         fields = {}
@@ -116,14 +118,14 @@ def serialize_fields(serializer, fieldsets=None):
             k = k if k else ''
             fields[k] = []
             allowed = {name: width for name, width in v['fields'].items()}
-            for f in l:
-                if f['name'] in allowed:
-                    f['width'] = allowed[f['name']]
-                    fields[k].append(f)
+            for name in allowed:
+                if name in allfields:
+                    allfields[name]['width'] = allowed[name]
+                    fields[k].append(allfields[name])
             if not fields[k]:
                 del fields[k]
     else:
-        fields = l
+        fields = allfields.values()
     return fields
 
 
@@ -139,12 +141,15 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
     if isinstance(value, decimal.Decimal) or isinstance(value, float):
         return str(value).replace('.', ',')
     elif isinstance(value, dict) or isinstance(value, list):
-        if type(value) == Link and value['url'].startswith('/media'):
+        if type(value) in (Link, Image):
             request = context['request']
             host_url = "{}://{}".format(
                 request.META.get('X-Forwarded-Proto', request.scheme), request.get_host()
             )
-            value['url'] = '{}{}'.format(host_url, value['url'])
+            if type(value) == Link and value['url'] and value['url'].startswith('/media'):
+                value['url'] = '{}{}'.format(host_url, value['url'])
+            if type(value) == Image and value['src'] and value['src'].startswith('/media'):
+                value['src'] = '{}{}'.format(host_url, value['src'])
         return value
     if isinstance(value, models.QuerySet) and value._iterable_class != ModelIterable:
         return value
@@ -154,7 +159,11 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
         paginator = PageNumberPagination()
         queryset = paginator.paginate_queryset(value, context['request'], context['view'], relation_name)
         fields = output.get('fields') if output else value.metadata.get('fields')
-        meta = dict(model=value.model, fields=fields)
+        related_field = output.get('related_field')
+        if related_field and len(fields) == 1:
+            meta = dict(model=value.model, exclude=[related_field])
+        else:
+            meta = dict(model=value.model, fields=fields)
         serializer = DynamicFieldsModelSerializer(
             queryset, many=True, read_only=True, context=context, meta=meta, is_relation=is_relation
         )
@@ -349,10 +358,14 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     def __init__(self, *args, is_relation=False, **kwargs):
         meta = kwargs.pop('meta', None)
         if meta:
-            self.Meta = type("Meta", (), dict(model=meta['model'], fields=[k for k in meta['fields']] or '__all__'))
-        self.item  = specification.items[
-            '{}.{}'.format(self.Meta.model._meta.app_label, self.Meta.model._meta.model_name)
-        ]
+            metadata = dict(model=meta['model'])
+            exclude = meta.get('exclude')
+            if exclude:
+                metadata['exclude'] = exclude
+            else:
+                metadata['fields'] = [k for k in meta['fields']] if len(meta['fields']) > 1 else '__all__'
+            self.Meta = type("Meta", (), metadata)
+        self.item  = specification.getitem(self.Meta.model)
         super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
         if is_relation:
             for name in list(self.fields):
@@ -457,7 +470,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                             try:
                                 width = metadata['fields'][x]
                             except KeyError:
-                                width = metadata['fields'].get(f'get_{x}')
+                                width = metadata['fields'].get(f'get_{x}', 100)
                         result[k]['fields'].append(dict(key=x, value=y, width=width))
                 else:
                     result[k] = v

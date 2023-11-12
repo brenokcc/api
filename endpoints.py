@@ -4,10 +4,13 @@ import yaml
 import decimal
 import json
 import re
+import requests
 import datetime
 import traceback
+from uuid import uuid1
 from django.apps import apps
 from django.db import models
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from .models import Role
@@ -141,6 +144,8 @@ class EnpointMetaclass(serializers.SerializerMetaclass):
             fields = getattr(meta, 'fields', None)
             fieldsets = getattr(meta, 'fieldsets', None)
             if model:
+                if isinstance(model, str):
+                    setattr(meta, 'model', apps.get_model(model))
                 bases = bases + (serializers.ModelSerializer,)
             if fields is None and fieldsets:
                 fields = []
@@ -199,7 +204,14 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     @classmethod
     def get_api_tags(cls):
-        return [cls.metadata('api_tag', '')]
+        target = cls.get_target()
+        if target == 'user':
+            api_tag = 'user'
+        elif target == 'api':
+            api_tag = 'api'
+        else:
+            api_tag = ''
+        return [api_tag]
 
     @classmethod
     def get_api_name(cls):
@@ -277,6 +289,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         else:
             try:
                 value = self.fields[name].to_internal_value(value)
+            except KeyError:
+                pass
             except ValidationError:
                 pass
             return default if value is None else value
@@ -311,8 +325,13 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     def post(self):
         if hasattr(self, 'save'):
-            if isinstance(self, serializers.ModelSerializer):
-                self.instance.save()
+            for k, field in self.fields.items():
+                if isinstance(field, serializers.FileField) and k in self.request.FILES:
+                    if hasattr(self.instance, k):
+                        file = self.request.FILES[k]
+                        filename = '{}.{}'.format(uuid1().hex, file.name.split('.')[-1])
+                        getattr(self.instance, k).save(filename, file)
+            self.instance.save()
         self.notify('Ação realizada com sucesso')
         return {}
 
@@ -377,7 +396,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
 
     def get(self):
         return None
-    
+
     def get_result(self):
         if self.metadata('cache'):
             ley = '{}.{}'.format(self.context['request'].user.id, type(self).__name__)
@@ -484,6 +503,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                     return Response(e.data)
                 except ValidationError as e:
                     return Response({'non_field_errors': e.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
+                except DjangoValidationError as e:
+                    return Response({'non_field_errors': e.message}, status=status.HTTP_400_BAD_REQUEST)
                 except Exception as e:
                     traceback.print_exc()
                     return Response({'non_field_errors': 'Ocorreu um erro no servidor ({}).'.format(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -543,7 +564,7 @@ class EndpointSet(Endpoint):
 class Shortcuts(Endpoint):
 
     class Meta:
-        api_tag = 'api'
+        target = 'api'
 
     def get(self):
         boxes = Boxes('Acesso Rápido')
@@ -562,7 +583,7 @@ class Dashboard(EndpointSet):
 
     class Meta:
         title = 'Início'
-        api_tag = 'api'
+        target = 'api'
 
     def check_permission(self):
         return self.user.is_authenticated
@@ -571,7 +592,7 @@ class Dashboard(EndpointSet):
 class Icons(Endpoint):
     class Meta:
         title = 'Ícones'
-        api_tag = 'api'
+        target = 'api'
 
     def get(self):
         return dict(type='icons', icons=ICONS)
@@ -580,14 +601,17 @@ class Icons(Endpoint):
         return self.user.is_superuser
 
 
-class Login(Endpoint):
-    username = CharField(label='Nome do usuário')
-    password = CharField(label='Senha')
+class Oauth(Endpoint):
+    code = QueryField(label='Authorization Code', default=None)
 
-    def oauth(self, code):
+    class Meta:
+        target = 'api'
+
+    def get(self):
+        code = self.getdata('code')
         specification = API.instance()
         for name, provider in specification.oauth.items():
-            redirect_uri = "{}{}".format(self.request.META['HTTP_ORIGIN'], provider['redirect_uri'])
+            redirect_uri = "{}{}".format(self.host_url(), provider['redirect_uri'])
             access_token_request_data = dict(
                 grant_type='authorization_code', code=code, redirect_uri=redirect_uri,
                 client_id=provider['client_id'], client_secret=provider['client_secret']
@@ -608,22 +632,32 @@ class Login(Endpoint):
             if response.status_code == 200:
                 data = json.loads(response.text)
                 username = data[provider['user_data']['username']]
-                user = User.objects.filter(username=username).first()
+                user = self.objects('auth.user').filter(username=username).first()
                 if user is None and provider.get('user_data').get('create'):
-                    user = User.objects.create(
+                    user = self.objects('auth.user').create(
                         username=username,
-                        email=data[provider['user_data']['email']] if provider['user_data']['mail'] else ''
+                        email=data[provider['user_data']['email']] if provider['user_data']['email'] else ''
                     )
                 if user:
                     token = Token.objects.get_or_create(user=user)[0]
-                    data = {'token': token.key}
-                    self.update(token, data)
-                    return Response(data)
+                    return dict(
+                        token=token.key, user=dict(id=user.id, username=user.username, is_superuser=user.is_superuser),
+                        redirect='/api/v1/dashboard/', message='Autenticação realizada com sucesso.'
+                    )
                 else:
-                    message = 'Usuário "{}" inexistente.'.format(username)
-                    return Response(dict(type='info', text=message))
-        return Response(dict(type='info', text='Ocorreu um erro ao realizar login.'))
+                    return dict(type='info', text='Usuário "{}" inexistente.'.format(username))
+        return dict(type='info', text='Ocorreu um erro ao realizar login.')
 
+    def check_permission(self):
+        return True
+
+
+class Login(Endpoint):
+    username = CharField(label='Nome do usuário')
+    password = CharField(label='Senha')
+
+    class Meta:
+        target = 'api'
 
     def post(self):
         username = self.getdata('username')
@@ -643,6 +677,10 @@ class Login(Endpoint):
 
 
 class Logout(Endpoint):
+
+    class Meta:
+        target = 'api'
+
     def get(self):
         self.redirect('/')
 
@@ -651,6 +689,9 @@ class Logout(Endpoint):
 
 
 class Manifest(Endpoint):
+
+    class Meta:
+        target = 'api'
 
     def get(self):
         specification = API.instance()
@@ -676,7 +717,7 @@ class Manifest(Endpoint):
 class Application(Endpoint):
 
     class Meta:
-        api_tag = 'api'
+        target = 'api'
 
     def __init__(self, *args, **kwargs):
         self.specification = API.instance()
@@ -763,7 +804,40 @@ class Application(Endpoint):
         return True
 
 
+class HealthCheck(Endpoint):
+
+    class Meta:
+        target = 'api'
+
+    def get(self):
+        return dict(status='UP', time=datetime.datetime.now().isoformat())
+
+    def check_permission(self):
+        return True
+
+
+class User(Endpoint):
+    class Meta:
+        target = 'user'
+
+    def get(self):
+        return dict(
+            id=self.instance.id,
+            username=self.instance.username,
+            roles=[
+                dict(id=role.id, name=role.get_description(), active=role.active)
+                for role in Role.objects.filter(username=self.instance.username)
+            ]
+        )
+
+    def check_permission(self):
+        return self.user.is_authenticated
+
+
 class UserRoles(Endpoint):
+
+    class Meta:
+        target = 'user'
 
     @classmethod
     def get_api_name(cls):
@@ -774,6 +848,9 @@ class UserRoles(Endpoint):
 
 
 class ActivateRole(Endpoint):
+
+    class Meta:
+        target = 'instance'
 
     def post(self):
         qs = self.objects('api.role').filter(username=self.instance.username)
@@ -864,7 +941,7 @@ class VerifyPassword(Endpoint):
 
 class TaskProgress(Endpoint):
     class Meta:
-        api_tag = 'api'
+        target = 'api'
 
     def get(self):
         data = cache.get(self.request.GET.get('key'), None)
