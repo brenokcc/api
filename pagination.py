@@ -165,7 +165,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
                 api_name = name[4:] if name.startswith('get_') else name
                 aggregation = dict(name=api_name, label=api_name, value=getattr(self.original_queryset, name)())
                 if isinstance(aggregation['value'], Decimal):
-                    aggregation['value'] = str(aggregations[api_name]).replace('.', ',')
+                    aggregation['value'] = str(aggregation['value']).replace('.', ',')
                 aggregations.append(aggregation)
 
         response = super().get_paginated_response(data)
