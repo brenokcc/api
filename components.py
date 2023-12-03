@@ -1,6 +1,12 @@
 from django.template.loader import render_to_string
 
 
+SUCCESS = 'success'
+PRIMARY = 'primary'
+WARNING = 'warning'
+DANGER = 'danger'
+
+
 class Image(dict):
     def __init__(self, src, width=200, height=200, round=False):
         self['type'] = 'image'
@@ -25,16 +31,24 @@ class QrCode(dict):
 
 
 class Progress(dict):
-    def __init__(self, value):
+    def __init__(self, value, style=None):
         self['type'] = 'progress'
         self['value'] = int(value or 0)
+        self['style'] = style
 
 
 class Status(dict):
     def __init__(self, style, label):
         self['type'] = 'status'
         self['style'] = style
-        self['label'] = label
+        self['label'] = str(label)
+
+
+class Badge(dict):
+    def __init__(self, color, label):
+        self['type'] = 'badge'
+        self['color'] = color
+        self['label'] = str(label)
 
 
 class Indicators(dict):
@@ -57,8 +71,8 @@ class Boxes(dict):
         self['title'] = str(title)
         self['items'] = []
 
-    def append(self, icon, label, url):
-        self['items'].append(dict(icon=icon, label=label, url=url))
+    def append(self, icon, label, url, style=None):
+        self['items'].append(dict(icon=icon, label=str(label), url=url, style=style))
 
 class Info(dict):
     def __init__(self, title, message):
@@ -68,7 +82,7 @@ class Info(dict):
         self['actions'] = []
 
     def action(self, label, url, modal=False, icon=None):
-        self['actions'].append(dict(label=label, url=url, modal=modal, icon=icon))
+        self['actions'].append(dict(label=str(label), url=url, modal=modal, icon=icon))
 
 
 class Warning(dict):
@@ -78,20 +92,45 @@ class Warning(dict):
         self['message'] = message
         self['actions'] = []
 
-    def action(self, label, url, modal=False):
-        self['actions'].append(dict(label=label, url=url, modal=modal))
+    def action(self, label, url, modal=False, icon=None):
+        self['actions'].append(dict(label=str(label), url=url, modal=modal, icon=icon))
 
 
 class Table(dict):
-    def __init__(self, actions=(), subsets=(), subset=None, filters=(), flags=(), rows=(), pagination=None):
+    def __init__(self, subset=None, pagination=None):
         self['type'] = 'table'
-        self['actions'] = actions
-        self['subsets'] = subsets
+        self['actions'] = []
+        self['subsets'] = []
         self['subset'] = subset
-        self['filters'] = filters
-        self['flags'] = flags
-        self['rows'] = rows
-        self['pagination'] = pagination
+        self['filters'] = []
+        self['flags'] = []
+        self['rows'] = []
+        self['pagination'] = {}
+
+    def add_subset(self, name, label, count):
+        self['subsets'].append(dict(name=name, label=label, count=count))
+
+    def add_action(self, name, label, icon=None):
+        self['actions'].append(dict(name=name, label=label, icon=icon))
+
+    def add_flag(self, name, label, checked=False):
+        self['flags'].append(dict(name=name, label=label, checked=checked))
+
+    def add_filter(self, ftype, name, label, value, choices=None):
+        self['filters'].append(dict(type=ftype, name=name, label=label, value=value, choices=choices))
+
+    def pagination(self, size, page, total, sizes):
+        self['pagination'].update(size=size, page=page, total=total, sizes=sizes)
+
+    def add_row(self, row):
+        self['rows'].append(row)
+
+    def row(self, value=None, checkable=False, deleted=False):
+        self['rows'].append([dict(name='#', value=value, checkable=checkable, deleted=deleted)])
+
+    def cell(self, name, value, style=None, url=None, actions=None):
+        self['rows'][-1].append(dict(name=name, value=value, style=style, url=url, actions=actions))
+
 
 class TemplateContent(dict):
     def __init__(self, name, context):

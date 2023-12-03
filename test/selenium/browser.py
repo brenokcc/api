@@ -333,7 +333,7 @@ class Browser(webdriver.Firefox):
             trs = self.find_elements(By.CSS_SELECTOR, 'tbody > tr')
             if trs:
                 tds = trs[i].find_elements(By.TAG_NAME, 'td')
-                tds[j].find_element(By.CSS_SELECTOR, 'input[type=checkbox]').click() if checkbox else tds[j].click()
+                tds[j].find_element(By.CSS_SELECTOR, 'input[type=checkbox]').click() if checkbox else tds[j].find_element(By.TAG_NAME, 'DIV').click()
             else:
                 raise WebDriverException()
         except WebDriverException as e:

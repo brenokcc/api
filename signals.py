@@ -8,20 +8,32 @@ def post_save_func(sender, **kwargs):
     pk = kwargs['instance'].pk
     model = '{}.{}'.format(sender._meta.app_label, sender._meta.model_name)
     for name, role in sender.__roles__.items():
-        for username in sender.objects.filter(pk=pk).values_list(role['username'], flat=True):
-            if username is None:
-                for scope in role.get('scopes', {}).keys():
-                    Role.objects.filter(
-                        name=name, scope=scope, model=model, value=pk
-                    ).delete()
+        scopes = role.get('scopes')
+        values = [role[k] for k in ('username', 'email', 'inactive', 'active') if k in role]
+        for item in sender.objects.filter(pk=pk).values(*values):
+            username = item[role['username']]
+            email = item[role['email']] if 'email' in role else ''
+            active = item[role['active']] if 'active' in role else True
+            inactive = item[role['inactive']] if 'inactive' in role else False
+            if username is None or (inactive or not active):
+                if scopes:
+                    for scope in scopes.keys():
+                        Role.objects.filter(username=username, name=name, scope=scope, model=model, value=pk).delete()
+                else:
+                    Role.objects.filter(username=username, name=name).delete()
             else:
                 user = User.objects.filter(username=username).first()
                 if user is None:
                     user = User.objects.create(username=username)
+                    user.email = email
                     user.set_password(settings.DEFAULT_PASSWORD(user))
                     user.save()
-                if role.get('scopes'):
-                    for scope, lookup in role.get('scopes').items():
+                else:
+                    if email and not user.email:
+                        user.email = email
+                        user.save()
+                if scopes:
+                    for scope, lookup in scopes.items():
                         scope_model = sender if lookup in ('id', 'pk') else related_model(sender, lookup)
                         model = '{}.{}'.format(scope_model._meta.app_label, scope_model._meta.model_name)
                         for value in sender.objects.filter(pk=pk).values_list(lookup, flat=True):
@@ -29,9 +41,7 @@ def post_save_func(sender, **kwargs):
                                 username=username, name=name, model=model, scope=scope, value=value
                             )
                 else:
-                    Role.objects.get_or_create(
-                        username=username, name=name, model=None, scope=None, value=None
-                    )
+                    Role.objects.get_or_create(username=username, name=name, model=None, scope=None, value=None)
 
 
 def m2m_save_func(sender, **kwargs):

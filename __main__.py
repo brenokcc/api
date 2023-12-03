@@ -196,6 +196,9 @@ Append: Adicionar
 First Name: Primeiro Nome
 Append: Adicionar
 Description: Descrição
+User Roles: Papéis
+Username: Login
+Scope Value: Escopo
 '''
 
 API_YML = '''api:
@@ -226,35 +229,33 @@ API_YML = '''api:
     auth.user:
       prefix: users
       icon: user-pen
-      search: username
       filters: date_joined__gte, is_superuser, username
       ordering: username
-      actions: list, add, view, edit, delete, api.endpoints.changepassword, api.endpoints.changepasswords, api.endpoints.verifypassword
-      fieldsets:
-        dados_gerais: username, first_name, last_name, get_full_name
-        dados_acesso: date_joined, is_staff, is_active
-        contato: email
-      relations:
-        api.endpoints.userroles:
-          fields: id, name, scope, model, value, active
-          actions: view
       endpoints:
         add:
-          fields: first_name, last_name, username, email, is_superuser
-        edit:
-          fields: first_name, last_name, username, email, is_superuser
+          fieldsets:
+            dados_gerais: username is_active, first_name last_name
+            contato: email
         list:
-          fields: id, username, api.endpoints.userroles
+          fields: id, username, email, api.endpoints.userroles
           actions: add, view, edit, delete, api.endpoints.changepassword, api.endpoints.changepasswords
+          extends:
+            active:
+              fields: id, username
+            inactive:
         view:
-          fields: id, dados_gerais, dados_acesso, api.endpoints.userroles
-          actions: api.endpoints.verifypassword, api.endpoints.changepassword
+          fieldsets:
+            dados_gerais: username get_full_name
+            dados_acesso:
+              actions: api.endpoints.verifypassword, api.endpoints.changepassword
+              fields: date_joined is_active, api.endpoints.userroles
+            contato: email
     api.role:
       prefix: roles
       endpoints:
         list:
-          fields: id, name
-          actions: view, edit 
+          fields: id, name, get_scope_value, active
+          actions: view, edit
   menu:
     - api.endpoints.dashboard
     - Sistema [gear]:
@@ -274,7 +275,7 @@ def startproject():
     ).replace('from pathlib', 'import os\nfrom pathlib')
     settings_content = settings_content.replace("'db.sqlite3'", "'db.sqlite3', 'TEST': {'NAME': 'test.sqlite3'}")
     # settings_append = open(settings.__file__).read().replace('import os', '').replace('# ', '')
-    settings_append = 'from api.conf import *'
+    settings_append = 'from api.conf import *\nDEFAULT_PASSWORD = lambda user: "123"'
     with open(settings_path, 'w') as file:
         file.write('{}\n{}\n'.format(settings_content, settings_append))
     local_settings_path = os.path.join(name, 'local_settings.py')

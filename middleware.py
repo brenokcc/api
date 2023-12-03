@@ -19,6 +19,8 @@ class CorsMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.method == 'OPTIONS':
+            return add_cors_headers(HttpResponse())
         return add_cors_headers(self.get_response(request))
 
 
@@ -31,6 +33,8 @@ class ReactJsMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.method == 'OPTIONS':
+            return add_cors_headers(HttpResponse())
 
         if ReactJsMiddleware.INDEX_FILE_CONTENT is None:
             specification = API.instance()
@@ -52,7 +56,7 @@ class ReactJsMiddleware:
             return HttpResponseRedirect(ReactJsMiddleware.ICON_URL)
 
         is_opt = request.method == 'OPTIONS'
-        is_api = request.path == '/' or request.path.startswith('/api/v1/')
+        is_api = request.path == '/' or request.path.startswith('/api/v1/') or request.path == '/app/login/govbr/'
         is_json = request.META.get('HTTP_ACCEPT') == 'application/json'
         is_raw = 'raw' in request.GET
         if is_api and not is_json and not is_raw and not is_opt:
@@ -61,6 +65,7 @@ class ReactJsMiddleware:
             response = self.get_response(request)
 
         if request.path.endswith('/'):
+            response["Vary"] = "Accept"
             response["Cache-Control"] = "max-age=0"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"

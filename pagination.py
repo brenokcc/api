@@ -73,12 +73,15 @@ class PageNumberPagination(pagination.PageNumberPagination):
         super().__init__(*args, **kwargs)
 
     def paginate_queryset(self, queryset, request, view=None, relation_name=None):
+        self.request = request
         self.original_queryset = queryset
-        self.url = request.get_full_path()
+        self.url = self.get_url()
         self.model = queryset.model
         self.relation_name = relation_name
         self.context = dict(request=request, view=view)
         self.subset = request.GET.get('subset')
+        if self.subset == 'all':
+            self.subset = None
         self.page_size = min(int(request.GET.get('page_size', 10)), 1000)
         queryset = queryset.filter()
         queryset = queryset.order_by('id') if not queryset.ordered else queryset
@@ -89,13 +92,16 @@ class PageNumberPagination(pagination.PageNumberPagination):
             queryset = getattr(queryset, self.subset)()
         return super().paginate_queryset(queryset, request, view=view)
 
-    def get_link(self, page):
+    def get_url(self, page=None):
         params = {k:v for k, v in self.request.query_params.items()}
-        params.update(page=page)
+        if page: params.update(page=page)
         return "{}://{}{}?{}".format(
             self.request.META.get('X-Forwarded-Proto', self.request.scheme), self.request.get_host(),
             self.request.path, '&'.join([f'{k}={v}' for k, v in params.items()])
-        ) if page else None
+        )
+
+    def get_link(self, page):
+        return self.get_url(page) if page else None
 
     def get_next_link(self):
         return self.get_link(self.page.next_page_number()) if self.page.has_next() else None
@@ -112,23 +118,33 @@ class PageNumberPagination(pagination.PageNumberPagination):
         actions = []
         filters = []
         search = []
-        subsets = {}
-        aggregations = {}
+        subsets = []
+        aggregations = []
         if metadata:
+            if self.subset and 'subsets' in metadata:
+                subset_metadata = metadata['subsets'][self.subset]
+                if subset_metadata:
+                    metadata = {k: v for k, v in metadata.items()}
+                    if subset_metadata['actions']:
+                        metadata['actions'] = subset_metadata['actions']
+                    if subset_metadata.get('requires'):
+                        metadata['requires'] = subset_metadata['requires']
+                    if len(subset_metadata['filters']) > 1:
+                        metadata['filters'] = subset_metadata['filters']
             title = metadata.get('title') or title
+            related_field = metadata.get('related_field')
             relation_name = metadata.get('name') or relation_name
             if relation_name:
                 relation_name = relation_name[4:] if relation_name.startswith('get_') else relation_name
-            actions.extend(actions_metadata(data, metadata.get('actions', {}), self.context, base_url, self.instances, viewer=metadata.get('viewer')))
-            related_field = metadata.get('related_field')
+            actions.extend(actions_metadata(data, metadata.get('actions', {}), self.context, base_url, self.instances, viewer=metadata.get('viewer'), related_field=related_field))
             if related_field:
                 relation_item = specification.getitem(self.model)
                 name = '{}_{}'.format('Adicionar', self.model._meta.verbose_name)
                 url = '{}{}/add/'.format(self.context['request'].path, metadata['name'])
-                if not relation_item.add_fieldsets:
-                    fieldsets = metadata.get('fieldsets')
-                    if fieldsets:
-                        relation_item.add_fieldsets = fieldsets
+                if related_field:
+                    url = '{}?rel={}'.format(url, related_field)
+                relation_item.related_fieldsets[related_field] = metadata.get('fieldsets')
+                # print(relation_item.__dict__)
                 actions.append(dict(name=name, url=url, icon='plus', target='queryset', modal=True, ids=[]))
 
             for name in metadata.get('search', ()):
@@ -143,13 +159,14 @@ class PageNumberPagination(pagination.PageNumberPagination):
                     filters.append(field)
 
             for name in metadata.get('subsets', ()):
-                subsets[name] = getattr(self.original_queryset, name)().count()
+                subsets.append(dict(name=name, label=name, count=getattr(self.original_queryset, name)().count()))
 
             for name in metadata.get('aggregations', ()):
                 api_name = name[4:] if name.startswith('get_') else name
-                aggregations[api_name] = getattr(self.original_queryset, name)()
-                if isinstance(aggregations[api_name], Decimal):
-                    aggregations[api_name] = str(aggregations[api_name]).replace('.', ',')
+                aggregation = dict(name=api_name, label=api_name, value=getattr(self.original_queryset, name)())
+                if isinstance(aggregation['value'], Decimal):
+                    aggregation['value'] = str(aggregations[api_name]).replace('.', ',')
+                aggregations.append(aggregation)
 
         response = super().get_paginated_response(data)
         model_name = to_snake_case(self.model.__name__)
@@ -173,6 +190,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
                 if response.data[k]:
                     if 'only=' not in response.data[k]:
                         response.data[k] = '{}&only={}'.format(response.data[k], relation_name)
+        print(response.data['url'])
         return response
 
 

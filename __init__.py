@@ -1,7 +1,7 @@
 import warnings
 from django.apps import apps
 from django.db import models
-from django.db.models import manager, Q, CharField, ForeignKey, DecimalField, ManyToManyField, CASCADE
+from django.db.models import manager, Q, CharField, ForeignKey, DecimalField, ManyToManyField, TextField, CASCADE
 from django.db.models.aggregates import Sum, Avg
 from django.db.models.base import ModelBase
 from .statistics import Statistics
@@ -94,7 +94,7 @@ class QuerySet(models.QuerySet):
 
     def search(self, *names):
         if 'search' not in self.metadata:
-            self.metadata['search'] = names
+            self.metadata['search'] = [name if '__' in name else '{}__icontains'.format(name) for name in names]
         return self
 
     def filters(self, *names):
@@ -206,12 +206,14 @@ class CharField(CharField):
 
 class ForeignKey(ForeignKey):
     def __init__(self, to, on_delete=None, **kwargs):
+        self.pick = kwargs.pop('pick', False)
         self.addable = kwargs.pop('addable', False)
         super().__init__(to, on_delete or CASCADE, **kwargs)
 
 
 class ManyToManyField(ManyToManyField):
     def __init__(self, *args, **kwargs):
+        self.pick = kwargs.pop('pick', False)
         self.addable = kwargs.pop('addable', False)
         super().__init__(*args, **kwargs)
 
@@ -230,6 +232,12 @@ class DecimalField(DecimalField):
         super().__init__(*args, **kwargs)
 
 
+class TextField(TextField):
+    def __init__(self, *args, **kwargs):
+        self.formatted= kwargs.pop('formatted', False)
+        super().__init__(*args, **kwargs)
+
+
 ModelBase.__new__ = __new__
 models.QuerySet = QuerySet
 models.Manager = Manager
@@ -238,3 +246,4 @@ models.ForeignKey = ForeignKey
 models.OneToManyField = OneToManyField
 models.ManyToManyField = ManyToManyField
 models.DecimalField = DecimalField
+models.TextField = TextField

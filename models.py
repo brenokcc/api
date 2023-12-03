@@ -1,8 +1,10 @@
 from django.db import models
 from django.apps import apps
+from datetime import datetime
 from api.specification import API
-
-api = API.instance()
+from django.conf import settings
+from django.utils.html import strip_tags
+from django.core.mail import EmailMultiAlternatives
 
 
 class RoleQuerySet(models.QuerySet):
@@ -42,7 +44,8 @@ class Role(models.Model):
         return self.get_description()
 
     def get_verbose_name(self):
-        return api.groups.get(self.name, self.name)
+        specification = API.instance()
+        return specification.groups.get(self.name, self.name)
 
     def get_scope_value(self):
         return apps.get_model(self.model).objects.get(pk=self.value) if self.model else None
@@ -50,3 +53,37 @@ class Role(models.Model):
     def get_description(self):
         scope_value = self.get_scope_value()
         return '{} - {}'.format(self.get_verbose_name(), scope_value) if scope_value else self.get_verbose_name()
+
+
+class EmailManager(models.Manager):
+    def all(self):
+        return self.order_by('-id')
+
+    def send(self, to, subject, content, from_email=None):
+        to = [to] if isinstance(to, str) else list(to)
+        return self.create(from_email=from_email or 'no-replay@mail.com', to=', '.join(to), subject=subject, content=content)
+
+
+class Email(models.Model):
+    from_email = models.EmailField('Remetente')
+    to = models.TextField('Destinatário', help_text='Separar endereços de e-mail por ",".')
+    subject = models.CharField('Assunto')
+    content = models.TextField('Conteúdo', formatted=True)
+    sent_at = models.DateTimeField('Data/Hora', null=True)
+
+    objects = EmailManager()
+
+    class Meta:
+        verbose_name = 'E-mail'
+        verbose_name_plural = 'E-mails'
+
+    def __str__(self):
+        return self.subject
+
+    def save(self, *args, **kwargs):
+        to = [email.strip() for email in self.to.split(',')]
+        msg = EmailMultiAlternatives(self.subject, strip_tags(self.content), self.from_email, to)
+        msg.attach_alternative(self.content, "text/html")
+        if settings.DEBUG or 'test' in sys.argv or msg.send(fail_silently=True):
+            self.sent_at = datetime.now()
+        super().save(*args, **kwargs)

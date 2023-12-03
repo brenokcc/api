@@ -8,12 +8,13 @@ import requests
 import datetime
 import traceback
 from uuid import uuid1
+from api.utils import related_model
 from django.apps import apps
 from django.db import models
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
-from .models import Role
+from .models import Role, Email
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -80,13 +81,14 @@ class RelatedField(serializers.RelatedField):
 
     def __init__(self, *args, **kwargs):
         self.pick = kwargs.pop('pick', False)
+        self.addable = kwargs.pop('addable', False)
         super().__init__(*args, **kwargs)
 
     def to_internal_value(self, value):
         return self.queryset.get(pk=value) if value else None
 
 
-def actions_metadata(source, actions, context, base_url, instances=(), viewer=None):
+def actions_metadata(source, actions, context, base_url, instances=(), viewer=None, related_field=None):
     l = []
     for qualified_name in actions:
         cls = ACTIONS[qualified_name]
@@ -114,6 +116,8 @@ def actions_metadata(source, actions, context, base_url, instances=(), viewer=No
             ids = serializer.test_permission(instances)
             append = True
         if append:
+            if qualified_name == 'edit' and related_field:
+                url = '{}?rel={}'.format(url, related_field)
             l.append(dict(name=cls.metadata('title', name), url=url, icon=icon, target=target, modal=cls.metadata('modal', True), style=cls.metadata('style', 'primary'), ids=ids))
     return l
 
@@ -189,6 +193,10 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         super().__init__(data=data, *args, **kwargs)
         for name in [k for k, v in self.fields.items() if type(v) == QueryField]:
             del self.fields[name]
+
+    @property
+    def instances(self):
+        return self.instance
 
     @classmethod
     def get_icon(cls):
@@ -332,13 +340,13 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                         filename = '{}.{}'.format(uuid1().hex, file.name.split('.')[-1])
                         getattr(self.instance, k).save(filename, file)
             self.instance.save()
-        self.notify('Ação realizada com sucesso')
+        self.notify()
         return {}
 
     def check_permission(self):
         return self.user.is_superuser
 
-    def notify(self, message):
+    def notify(self, message='Ação realizada com sucesso'):
         self.user_message = str(message).replace('\n', '<br>')
 
     def redirect(self, url):
@@ -416,9 +424,13 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         return default
 
     def get_url(self):
-        return '/api/v1/{}/'.format(
+        url = '/api/v1/{}/'.format(
             to_snake_case(type(self).__name__)
         ) if self.get_target() is None else self.request.path
+        querystring = self.request.GET.urlencode()
+        if querystring:
+            url = '{}?{}'.format(url, querystring)
+        return url
 
     def host_url(self):
         return "{}://{}".format(self.request.META.get('X-Forwarded-Proto', self.request.scheme), self.request.get_host())
@@ -445,6 +457,9 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
                 fieldsets[k] = dict(name=k, fields=fields)
         return fieldsets
 
+    def send_mail(self, to, subject, content, from_email=None):
+        Email.objects.send(to, subject, content, from_email)
+
     def to_response(self, key=None):
         from .serializers import serialize_value, serialize_fields
         on_change = self.request.query_params.get('on_change')
@@ -461,8 +476,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
             return Response(self.controls)
         only = self.request.query_params.get('only')
         choices = self.request.query_params.get('choices_field')
-        if choices and not only and choices!='seacher':
-            self.load()
+        self.load()
+        if choices and not only and choices in self.fields:
             term = self.request.query_params.get('choices_search')
             field = self.fields[choices]
             if isinstance(field, serializers.ManyRelatedField):
@@ -473,19 +488,26 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
             if hasattr(self, attr_name):
                 qs = getattr(self, attr_name)(qs)
             return Response(as_choices(qs.apply_search(term)))
+        if choices and not only and choices not in self.fields:
+            term = self.request.query_params.get('choices_search')
+            qs = self.get()
+            relmodel = related_model(qs.model, choices)
+            qs = relmodel.objects.filter(id__in=qs.values_list(choices, flat=True))
+            return Response(as_choices(qs.apply_search(term)))
 
         if self.request.method == 'GET' and not self.is_submitted():
             self.is_valid()
             form = dict(
                 type='form', method=self.get_method().lower(), name=self.get_name(), icon=self.metadata('icon'),
-                action=self.get_url(), fields=serialize_fields(self, self.get_fieldsets()),
+                action=self.get_url(), fields=serialize_fields(self, self.get_fieldsets(), self.request),
                 controls=self.controls, watch=self.watchable_field_names(), style=self.metadata('style'),
                 help_text=self.get_help_text()
             )
             if self.instance and self.metadata('display'):
                 self.instance._wrap = True
                 try:
-                    display = serialize_value(self.instance, self.context, output=dict(fields=self.metadata('display')))
+                    fields = {k: 100 for k in self.metadata('display')}
+                    display = serialize_value(self.instance, self.context, output=dict(fields=fields))
                     display['actions'] = []
                 except JsonResponseReadyException as e:
                     return Response(e.data)
@@ -573,7 +595,7 @@ class Shortcuts(Endpoint):
             if item.icon and check_roles(item.list_lookups, self.user, False):
                 label = apps.get_model(k)._meta.verbose_name_plural
                 boxes.append(item.icon, label, item.url)
-        return boxes if boxes else None
+        return boxes if boxes['items'] else None
 
     def check_permission(self):
         return self.instance.is_authenticated
@@ -895,7 +917,6 @@ class ChangePassword(Endpoint):
 
     class Meta:
         icon = 'user-shield'
-        display = 'last_login',
         target = 'user'
 
     def post(self):
@@ -930,13 +951,17 @@ class VerifyPassword(Endpoint):
     senha = serializers.CharField(label='Senha')
 
     class Meta:
+        icon = 'check'
         target = 'user'
 
     def post(self):
-        return self.notify(self.instance.check_password(self.getdata('senha')))
+        checked = self.instance.check_password(self.getdata('senha'))
+        if not checked:
+            raise ValidationError('Senha não confere.')
+        return self.notify('Senha verificada com sucesso.')
 
     def check_permission(self):
-        return True
+        return self.user.is_superuser
 
 
 class TaskProgress(Endpoint):

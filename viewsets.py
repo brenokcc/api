@@ -226,11 +226,12 @@ class ModelViewSet(viewsets.ModelViewSet):
                     _fields = self.item.list_display
                 elif self.action == 'retrieve':
                     _fields = [k[4:] if k.startswith('get_') else k for k in self.item.view_fields.keys()]
-                    if 'id' not in _fields:
+                    if _fields and 'id' not in _fields:
                         _fields.insert(0, 'id')
                 elif self.action == 'update' or self.action == 'partial_update':
                     _fields = []
-                    for fieldset in (self.item.edit_fieldsets or self.item.add_fieldsets).values():
+                    _fieldsets = self.item.related_fieldsets.get(self.request.GET.get('rel')) or self.item.edit_fieldsets or self.item.add_fieldsets
+                    for fieldset in _fieldsets.values():
                         if fieldset.get('requires'):
                             if not permissions.check_roles(fieldset.get('requires'), self.request.user, False):
                                 continue
@@ -246,7 +247,8 @@ class ModelViewSet(viewsets.ModelViewSet):
                         _fields = [k[4:] if k.startswith('get_') else k for k in self.item.relations[self.action]['fields']]
                     else:
                         _exclude = self.item.relations[self.action]['related_field'],
-                    _model = getattr(_model(pk=0), self.action)().model
+                    attr = getattr(_model(pk=0), self.action)
+                    _model = attr.model if hasattr(attr, 'model') else attr().model
                 else:
                     _fields = self.item.list_display
                 class cls(DynamicFieldsModelSerializer):
@@ -295,7 +297,7 @@ class ModelViewSet(viewsets.ModelViewSet):
         if request.method == 'GET':
             serializer = self.get_serializer()
             name = '{}_{}'.format('Cadastrar', self.model._meta.verbose_name)
-            form = dict(type='form', icon='plus', method='post', name=name, action=request.path, fields=serialize_fields(serializer, self.item.add_fieldsets))
+            form = dict(type='form', icon='plus', method='post', name=name, action=request.path, fields=serialize_fields(serializer, self.item.add_fieldsets, request))
             return Response(form)
 
     @apidoc(parameters=['choices_field', 'choices_search'])
@@ -324,12 +326,15 @@ class ModelViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance, data=instance.__dict__)
             serializer.is_valid()
             name = '{}_{}'.format('Editar', self.model._meta.verbose_name)
-            form = dict(type='form', icon='pencil', method='put', name=name, action=request.path, fields=serialize_fields(serializer, (self.item.edit_fieldsets or self.item.add_fieldsets)))
+            _fieldsets = self.item.related_fieldsets.get(self.request.GET.get('rel')) or self.item.edit_fieldsets or self.item.add_fieldsets
+            form = dict(type='form', icon='pencil', method='put', name=name, action=request.path, fields=serialize_fields(serializer, _fieldsets, request))
             return Response(form)
 
     @apidoc(parameters=['choices_field', 'choices_search'])
     def update(self, request, *args, **kwargs):
-        permissions.check_roles(self.item.edit_lookups, request.user)
+        rel = self.request.GET.get('rel')
+        item = specification.getitem(type(getattr(self.get_object(), rel))) if rel else self.item
+        permissions.check_roles(item.edit_lookups, request.user)
         try:
             return self.choices_response(request) or self.update_form(request) or self.post_update(
                 super().update(request, *args, **kwargs)
@@ -353,7 +358,7 @@ class ModelViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance, data=instance.__dict__)
             serializer.is_valid()
             name = '{}_{}'.format('Editar', self.model._meta.verbose_name)
-            form = dict(type='form', icon='trash', method='delete', name=name, action=request.path.replace('delete/', ''), fields=serialize_fields(serializer))
+            form = dict(type='form', icon='trash', method='delete', name=name, action=request.path.replace('delete/', ''), fields=serialize_fields(serializer, None, request))
             return Response(form)
 
     @apidoc(parameters=[])
@@ -512,11 +517,12 @@ def create_relation_func(func_name, relation):
 
         if request.method == 'GET':
             serializer.is_valid()
-            relation_model = getattr(instance, relation['name'])().model
+            attr = getattr(instance, relation['name'])
+            relation_model = attr.model if hasattr(attr, 'model') else attr().model
             relation_item = specification.getitem(relation_model)
             name = '{}_{}'.format('Adicionar', relation_model._meta.verbose_name)
             fieldsets = relation.get('fieldsets', relation_item.add_fieldsets)
-            form = dict(type='form', method='post', name=name, action=request.path, fields=serialize_fields(serializer, fieldsets))
+            form = dict(type='form', method='post', name=name, action=request.path, fields=serialize_fields(serializer, fieldsets, request))
             return Response(form)
 
         if serializer.is_valid():
@@ -570,11 +576,18 @@ for app_label in settings.INSTALLED_APPS:
 for k, item in specification.items.items():
     model = apps.get_model(k)
     for name, relation in item.relations.items():
-        if '.' not in name and relation['actions']:
-            subitem = specification.getitem(getattr(model(pk=0), name)().model)
+        if '.' not in name and relation['actions'] or relation.get('subsets'):
+            attr = getattr(model(pk=0), name)
+            subitem = specification.getitem(attr.model if hasattr(attr, 'model') else attr().model)
             if subitem:
                 for name in relation['actions']:
                     subitem.actions.add(name)
+                subsets = relation.get('subsets')
+                if subsets:
+                    for subset in subsets.values():
+                        if subset:
+                            for name in subset.get('actions', ()):
+                                subitem.actions.add(name)
     for name in item.list_actions:
         item.actions.add(name)
     for name in item.view_actions:

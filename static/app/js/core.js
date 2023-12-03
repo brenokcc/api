@@ -20,7 +20,7 @@ function request(method, url, callback, data){
     if(token) headers['Authorization'] = 'Token '+token;
     url = url.replace(document.location.origin, '');
     if(url.indexOf(API_URL) == -1) url = API_URL + url;
-    var params = {method: method, headers: new Headers(headers)};
+    var params = {method: method, headers: new Headers(headers), ajax: 1};
     if(data) params['body'] = data;
     var httpResponse = null;
     var contentType = null;
@@ -36,10 +36,11 @@ function request(method, url, callback, data){
             if(contentType=='application/json'){
                 var data = JSON.parse(result||'{}');
                 if(data.token){
-                    localStorage.removeItem("application");
+                    if(document.location.pathname=='/api/v1/login/'){
+                        localStorage.removeItem("application");
+                    }
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', data.user.username);
-
                 }
                 if(data.redirect){
                     if(data.message) setCookie('message', data.message);
@@ -71,12 +72,18 @@ function request(method, url, callback, data){
 function closeDialogs(){
     var dialogs = document.getElementsByTagName('dialog');
     for(var i=0; i<dialogs.length; i++){
-        var dialog = dialogs[i];
-        dialog.close();
-        dialog.classList.remove('opened');
-        dialog.remove();
-        $('.layer').hide();
-        if(window.reloader) window.reloader();
+        if(i==dialogs.length-1){
+            var dialog = dialogs[i];
+            dialog.close();
+            dialog.classList.remove('opened');
+            dialog.remove();
+            if(i==0){
+                $('.layer').hide();
+                if(window.reloader) window.reloader();
+            } else {
+                dialogs[i-1].style.display = "block";
+            }
+        }
     }
 }
 

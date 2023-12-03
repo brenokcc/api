@@ -1,4 +1,11 @@
 var timeout = null;
+function resizeDialog(height){
+    if($('dialog:visible').length){
+        $('dialog:visible').css(
+            'height', (parseFloat($('dialog:visible').css('height').toString().replace('px', ''))+height).toString()+'px'
+        );
+    }
+}
 function setAcValue(name, value, label){
     var select = document.getElementById(name);
     var input = document.getElementById(name+'autocomplete');

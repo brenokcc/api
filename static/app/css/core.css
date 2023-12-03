@@ -119,6 +119,9 @@ a:hover, a:visited{
 .login-form .form-group.token{
     display: none;
 }
+.field .steps-wrapper{
+    zoom: 80%;
+}
 .steps-wrapper{
     overflow-x: auto;
     white-space: nowrap;
@@ -198,18 +201,23 @@ a:hover, a:visited{
 .boxes .item i{
     margin-top: 30px;
     font-size: 3rem;
-    color: var(--auxiliary-color)
 }
 .boxes .item .text{
     margin-top: 40px;
     font-weight: bold;
-    color: var(--highlight-color);
     font-size: 1.2rem;
     text-transform: uppercase;
     height: 70px;
 }
+.boxes .icon.primary i{color: var(--auxiliary-color);}
+.boxes .text.primary {color: var(--highlight-color);}
+.boxes .icon.danger{color: var(--danger-color);}
+.boxes .text.danger {color: var(--danger-color);}
 .sidemenu li i.fa-chevron-down, .sidemenu li i.fa-chevron-up{
     float: right;
+}
+.main {
+    min-height: 300px;
 }
 .main .menu a{
     text-decoration: none;
@@ -287,6 +295,12 @@ a:hover, a:visited{
     padding: 15px;
     white-space: pre-line;
 }
+.table tbody td i:hover{
+    background-color: transparent;
+}
+.table tbody td ul{
+    padding-inline-start: 5px;
+}
 .table tbody td.clickable{
     cursor: pointer;
 }
@@ -311,19 +325,12 @@ a:hover, a:visited{
     border-left: solid 1px #FFF;
     border-right: solid 1px #FFF;
 }
-.table-wrapper .batchActions .btn.primary:hover{
-    border-color: white;
-}
-.table-wrapper .batchActions i{
-    color: white;
-}
+
 .table-wrapper .batchActions .counter{
-    color: white;
     padding-top: 15px;
 }
 .table-wrapper .batchActions{
     width: 100%;
-    background-color: var(--primary-color);
     text-align: left;
     padding: 10px;
     display: block;
@@ -335,15 +342,22 @@ a:hover, a:visited{
 .subsets .subset{
     cursor: pointer;
     display: inline-block;
-    margin: 30px;
+    margin-top: 15px;
+    margin-left: 30px;
+    margin-right: 30px;
+    margin-bottom: 15px;
 }
 .subsets .subset.active{
     color: var(--primary-color);
 }
 .subsets .subset .counter{
-    position: absolute;
-    margin-left: 5px;
-    margin-top: -5px;
+    background-color: var(--primary-color);
+    color: white;
+    padding-bottom: 2px;
+    border-radius: 50%;
+    float: right;
+    min-width: 18px;
+    margin-left: 10px;
     font-size: 80%;
 }
 .pagination{
@@ -577,6 +591,9 @@ a:hover, a:visited{
 .icons .icon-box:hover{
     background-color: #ffd43b;
 }
+.btn.disabled{
+    opacity: 0.5;
+}
 .btn.primary, .btn.secondary:hover{
     color: white;
     background-color: var(--primary-color);
@@ -711,6 +728,9 @@ i.clickable:hover{
     font-weight: bold;
     font-size: 1rem;
 }
+.viewer .queryset, .viewer .fieldset{
+    margin-top: 25px;
+}
 .viewer .queryset h1{
     font-size: 1.3rem;
 }
@@ -721,7 +741,7 @@ input[type="checkbox"], input[type="radio"]{
   font: inherit;
   width: 1.5em;
   height: 1.5em;
-  border: solid 1px #DDD;
+  border: solid 1px #333;
   transform: translateY(-0.075em);
   display: grid;
   place-content: center;
@@ -775,10 +795,15 @@ input[type="radio"]:checked::before {
     border: solid 1px #DDD;
 }
 .queryset h1 .counter{
-    position: absolute;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 5px;
+    border-radius: 5px;
     margin-left: 10px;
-    margin-top: 5px;
+    float:right;
     font-size: 50%;
+    min-width: 25px;
+    text-align: center;
 }
 .statistics table{
     width: 100%;
@@ -834,22 +859,15 @@ input[type="radio"]:checked::before {
     padding: 10px;
     text-align: center;
 }
-.queryset .batchActions .btn.primary:hover{
-    border-color: white;
-}
-.queryset .batchActions i{
-    color: white;
-}
+
 .queryset .batchActions .counter{
-    color: white;
     padding-top: 15px;
+    color: var(--primary-color);
 }
 .queryset .batchActions{
     width: 100%;
-    background-color: var(--primary-color);
     text-align: left;
     padding: 10px;
-    display: none;
 }
 .searcher{
     margin: 20px;
@@ -1099,8 +1117,8 @@ form .field-error{
     color: white;
     width: 300px;
     position: fixed;
-    top: 125px;
-    right: 20px;
+    top: 25px;
+    right: calc(50% - 150px);
     text-align: center;
     z-index: 9999;
 }
@@ -1116,6 +1134,15 @@ form .field-error{
 .notification.danger{
     background-color: var(--danger-color);
 }
+.color{
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+}
+.color.primary{background-color: var(--primary-color);}
+.color.success{background-color: #2d7e25}
+.color.warning{background-color: #ccb055;}
+.color.danger{background-color: var(--danger-color);}
 .progress{
     display: inline-block;
     width: 100%;
@@ -1123,14 +1150,29 @@ form .field-error{
     border-radius: 5px;
     margin-top:5px;
 }
+.progress .value .percentage{
+    margin-left: 10px;
+}
 .progress .value{
     display: block;
-    background-color: var(--primary-color);
-    padding: 5px;
+    padding-top: 5px;
+    padding-bottom: 5px;
     color: white;
     border-radius: 5px;
 }
+.progress .value.primary{background-color: var(--primary-color);}
+.progress .value.success{background-color: #2d7e25}
+.progress .value.warning{background-color: #ccb055;}
+.progress .value.danger{background-color: var(--danger-color);}
 .status{
+    display: flex;
+}
+.status .text{
+    margin-top: 5px;
+    padding-left: 10px;
+    white-space: nowrap;
+}
+.badge{
     color:white;
     width: fit-content;
     border-radius: 5px;
@@ -1138,15 +1180,7 @@ form .field-error{
     padding: 10px;
     white-space: nowrap;
 }
-.status.primary{
-    background-color: var(--primary-color);
-}
-.status.success{
-    background-color: #49cc90;
-}
-.status.danger{
-    background-color: #f93e3e;
-}
-.status.warning{
-    background-color: #fca130;
-}
+.badge.primary{background-color: var(--primary-color);}
+.badge.success{background-color: #49cc90;}
+.badge.danger{background-color: #f93e3e;}
+.badge.warning{background-color: #fca130;}

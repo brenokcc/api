@@ -20,7 +20,6 @@ from .pagination import PageNumberPagination, PaginableManyRelatedField
 from .specification import API
 from .exceptions import JsonResponseReadyException
 
-specification = API.instance()
 
 NONE = '__NONE__'
 
@@ -29,11 +28,13 @@ MASKS = dict(
     cpf='999.999.999-99',
 )
 
-def serialize_fields(serializer, fieldsets=None):
+def serialize_fields(serializer, fieldsets=None, request=None):
+    rel = request.GET.get('rel')
+    specification = API.instance()
     allfields = {}
     instance = serializer.instance if isinstance(serializer, ModelSerializer) else None
     for name, field in serializer.fields.items():
-        if name == 'id': continue
+        if name in ('id', rel): continue
         extra = {}
 
         for k, v in MASKS.items():
@@ -60,19 +61,27 @@ def serialize_fields(serializer, fieldsets=None):
             else:
                 choices.insert(0, dict(id='', text=''))
         elif isinstance(field, ManyRelatedField):
+            if getattr(field.child_relation, 'addable', False):
+                item = specification.getitem(field.child_relation.queryset.model)
+                if permissions.check_roles(item.add_lookups, request.user, False):
+                    extra.update(add_url='{}add/'.format(item.url))
             field_type = 'select'
             extra.update(multiple=True)
             qs = getattr(instance, name) if instance else field.child_relation.queryset.filter(pk__in=field.initial)
             value = [dict(id=obj.id, text=str(obj)) for obj in qs.all()] if qs else []
-            if (getattr(field.child_relation, 'pick', False)):
+            if getattr(field.child_relation, 'pick', False):
                 choices = [dict(id=obj.id, text=str(obj)) for obj in field.child_relation.queryset.all()]
                 extra.update(choices=choices, pick=True)
         elif isinstance(field, RelatedField):
+            if getattr(field, 'addable', False):
+                item = specification.getitem(field.queryset.model)
+                if permissions.check_roles(item.add_lookups, request.user, False):
+                    extra.update(add_url='{}add/'.format(item.url))
             field_type = 'select'
             extra.update(multiple=False)
             obj = getattr(instance, name) if instance else field.queryset and field.queryset.filter(pk=field.initial).first()
             value = dict(id=obj.id, text=str(obj)) if obj else None
-            if(getattr(field, 'pick', False)):
+            if getattr(field, 'pick', False):
                 choices = [dict(id=obj.id, text=str(obj)) for obj in field.queryset.all()]
                 extra.update(choices=choices, pick=True)
         elif isinstance(field, serializers.FileField):
@@ -130,6 +139,7 @@ def serialize_fields(serializer, fieldsets=None):
 
 
 def serialize_value(value, context, output=None, is_relation=False, relation_name=None):
+    specification = API.instance()
     if value is None:
         return None
     elif isinstance(value, str):
@@ -159,7 +169,7 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
         paginator = PageNumberPagination()
         queryset = paginator.paginate_queryset(value, context['request'], context['view'], relation_name)
         fields = output.get('fields') if output else value.metadata.get('fields')
-        related_field = output.get('related_field')
+        related_field = output.get('related_field') if output else None
         if related_field and len(fields) == 1:
             meta = dict(model=value.model, exclude=[related_field])
         else:
@@ -198,7 +208,8 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
 
 class MethodField(serializers.Field):
 
-    def __init__(self, *args, method_name=None, **kwargs):
+    def __init__(self, *args, item, method_name=None, **kwargs):
+        self.item = item
         self.method_name = method_name
         super().__init__(*args, **kwargs)
 
@@ -209,16 +220,21 @@ class MethodField(serializers.Field):
                 raise JsonResponseReadyException(choices)
 
     def to_representation(self, instance):
-        model = type(instance)
-        key = '{}.{}'.format(model._meta.app_label, model._meta.model_name)
-        item = specification.items.get(key)
         value = getattr(instance, self.method_name)()
-        relation = item.relations.get(self.method_name)
+        relation = self.item.relations.get(self.method_name)
         if relation:
             if not permissions.check_roles(relation.get('requires'), self.context['request'].user, False):
                 return NONE
             if isinstance(value, models.QuerySet):
                 value = value.contextualize(self.context['request'], relation)
+            subset = self.context['request'].GET.get('subset')
+            if subset == 'all':
+                subset = None
+            if subset and 'subsets' in relation:
+                subset_metadata = relation['subsets'][subset]
+                if subset_metadata:
+                    relation = {k:v for k, v in relation.items()}
+                    relation['fields'] = subset_metadata.get('fields') or relation['fields']
         data = serialize_value(value, self.context, output=relation, is_relation=True)
         if isinstance(value, models.QuerySet):
             data['relation'] = self.method_name.replace('get_', '')
@@ -228,6 +244,9 @@ class MethodField(serializers.Field):
 class RelationSerializer(serializers.RelatedField):
 
     def __init__(self, *args, **kwargs):
+        self.addable = kwargs.pop('addable', False)
+        self.pick = kwargs.pop('pick', False)
+        self.specification = API.instance()
         super().__init__(*args, **kwargs)
 
     def to_representation(self, value):
@@ -237,18 +256,22 @@ class RelationSerializer(serializers.RelatedField):
         if not isinstance(self.root, serializers.ListSerializer):
             model = type(self.root.instance)
             key = '{}.{}'.format(model._meta.app_label, model._meta.model_name)
-            item = specification.items.get(key)
+            item = self.specification.items.get(key)
             relation = item.relations.get(relation_name)
             if relation:
                 if not permissions.check_roles(relation.get('requires'), self.context['request'].user, False):
                     return NONE
                 if relation.get('fields'):
+                    fields = relation.get('fields')
+                    related_field = relation.get('related_field')
+                    exclude = (related_field,) if related_field and len(fields)==1 else None
+                    meta = dict(model=type(value), fields=fields, exclude=exclude)
                     self.serializer = DynamicFieldsModelSerializer(
-                        instance=value, meta=dict(model=type(value), fields=relation.get('fields')),
+                        instance=value, meta=meta,
                         context=self.context, is_relation=True
                     )
                     return self.serializer.data
-        if specification.app:
+        if self.specification.app:
             return str(value)
         else:
             return dict(id=value.id, text=str(value)) if value else None
@@ -278,6 +301,7 @@ class RelationSerializer(serializers.RelatedField):
 class ActionField(serializers.DictField):
 
     def __init__(self, field_name, serializer_class, context, *args, **kwargs):
+        self.specification = API.instance()
         self.field_name = field_name
         self.serializer_class = serializer_class
         super().__init__(*args, **kwargs)
@@ -292,9 +316,7 @@ class ActionField(serializers.DictField):
     def to_representation(self, value):
         serializer = self.serializer_class(context=self.context, instance=value)
         result = serializer.get()
-        model = type(value)
-        key = '{}.{}'.format(model._meta.app_label, model._meta.model_name)
-        item = specification.items.get(key)
+        item = self.specification.getitem(type(value))
         relation = item.relations.get(self.field_name)
         if relation:
             if not permissions.check_roles(relation.get('requires'), self.context['request'].user, False):
@@ -312,18 +334,22 @@ class ActionField(serializers.DictField):
 
 class FieldsetField(serializers.DictField):
 
-    def __init__(self, *args, fieldset=None, request=None, **kwargs):
+    def __init__(self, *args, fieldset=None, request=None, relation_name=None, **kwargs):
+        self.specification = API.instance()
         self.only = []
         self.fieldset = fieldset
+        self.relation_name = relation_name
         super().__init__(*args, **kwargs)
         if 'only' in request.GET:
             self.only = [name.strip() for name in request.GET['only'].split(',')]
 
     def to_representation(self, value):
+        if self.relation_name:
+            value = getattr(value, self.relation_name)
+            if value is None:
+                return None
         data = {}
-        model = type(value)
-        key = '{}.{}'.format(model._meta.app_label, model._meta.model_name)
-        item = specification.items.get(key)
+        item = self.specification.getitem(type(value))
         requires = self.fieldset.get('requires')
         if requires and not permissions.check_roles(requires, self.context['request'].user, False):
             return NONE
@@ -341,9 +367,12 @@ class FieldsetField(serializers.DictField):
                 attr_value = getattr(value, attr_name)()
             else:
                 api_attr_name = attr_name
-                attr_value = getattr(value, attr_name)
+                if 'get_{}'.format(attr_name) in item.view_methods:
+                    attr_value = getattr(value, 'get_{}'.format(attr_name))()
+                else:
+                    attr_value = getattr(value, attr_name)
             if (isinstance(attr_value, models.Manager) or isinstance(attr_value, models.QuerySet) or hasattr(attr_value, 'all')):
-                attr_value = [str(obj) for obj in attr_value.all()]
+                attr_value = [{'id': obj.id, 'text': str(obj)} for obj in attr_value.all()]
             data[api_attr_name] = serialize_value(attr_value, self.context)
         return data
 
@@ -354,8 +383,8 @@ class FieldsetField(serializers.DictField):
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     serializer_related_field = RelationSerializer
 
-
     def __init__(self, *args, is_relation=False, **kwargs):
+        self.is_relation = is_relation
         meta = kwargs.pop('meta', None)
         if meta:
             metadata = dict(model=meta['model'])
@@ -365,7 +394,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             else:
                 metadata['fields'] = [k for k in meta['fields']] if len(meta['fields']) > 1 else '__all__'
             self.Meta = type("Meta", (), metadata)
-        self.item  = specification.getitem(self.Meta.model)
+        self.item  = API.instance().getitem(self.Meta.model)
         super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
         if is_relation:
             for name in list(self.fields):
@@ -400,21 +429,37 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     def build_property_field(self, field_name, model_field):
         field_cls, field_kwargs = super().build_property_field(field_name, model_field)
         if issubclass(field_cls, serializers.ReadOnlyField) and field_name.startswith('get_'):
-            return MethodField, dict(source='*', method_name=field_name)
+            return MethodField, dict(source='*', item=self.item, method_name=field_name)
         return field_cls, field_kwargs
 
     def build_relational_field(self, field_name, relation_info):
+        action = self.context['view'].action
         method_name = 'get_{}'.format(field_name)
-        if method_name in self.item.view_methods and self.context['view'].action in ('list', 'retrieve'):
-            field_cls, field_kwargs = MethodField, dict(source='*', method_name=method_name)
+        if action in ('list', 'retrieve') and method_name in self.item.view_methods:
+            field_cls, field_kwargs = MethodField, dict(source='*', item=self.item, method_name=method_name)
+        elif action == 'retrieve' and field_name in self.item.view_fields and not self.is_relation and isinstance(relation_info.model_field, models.ForeignKey):
+            fieldset = self.item.view_fields[field_name]
+            field_cls, field_kwargs = FieldsetField, dict(
+                source='*', fieldset=fieldset, request=self.context['request'], relation_name=field_name,
+                help_text='Returns {}'.format(fieldset['fields'])
+            )
+        elif action == 'list' and field_name in self.item.list_fieldsets:
+            fieldset = self.item.list_fieldsets[field_name]
+            field_cls, field_kwargs = FieldsetField, dict(
+                source='*', fieldset=fieldset, request=self.context['request'], relation_name=field_name,
+                help_text='Returns {}'.format(fieldset['fields'])
+            )
         else:
             field_cls, field_kwargs = super().build_relational_field(field_name, relation_info)
+            if field_cls == RelationSerializer:
+                field_kwargs.update(pick=getattr(relation_info.model_field, 'pick', False))
+                field_kwargs.update(addable=getattr(relation_info.model_field, 'addable', False))
         return field_cls, field_kwargs
 
     def build_standard_field(self, field_name, model_field):
         method_name = 'get_{}'.format(field_name)
         if method_name in self.item.view_methods and self.context['view'].action in ('list', 'retrieve'):
-            field_cls, field_kwargs = MethodField, dict(source='*', method_name=method_name)
+            field_cls, field_kwargs = MethodField, dict(source='*', item=self.item, method_name=method_name)
         else:
             field_cls, field_kwargs = super().build_standard_field(field_name, model_field)
             if issubclass(field_cls, serializers.DecimalField):
@@ -422,9 +467,10 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         return field_cls, field_kwargs
 
     def build_unknown_field(self, field_name, model_class):
+        action = self.context['view'].action
         method_name = 'get_{}'.format(field_name)
-        if method_name in self.item.view_methods and self.context['view'].action in ('list', 'retrieve'):
-            return MethodField, dict(source='*', method_name=method_name)
+        if action in ('list', 'retrieve') and method_name in self.item.view_methods:
+            return MethodField, dict(source='*', item=self.item, method_name=method_name)
         if field_name in ACTIONS:
             return ActionField, dict(
                 source='*', field_name=field_name, serializer_class=ACTIONS[field_name], context=self.context
@@ -438,6 +484,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         super().build_unknown_field(field_name, model_class)
 
     def to_representation(self, instance):
+        specification = API.instance()
         for field in self._readable_fields:
             if isinstance(field, PaginableManyRelatedField) or isinstance(field, ActionField) or isinstance(field, MethodField):
                 field.check_choices_response()
@@ -453,8 +500,8 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             representation[k] = v
 
         if specification.app and getattr(instance, '_wrap', False):
-            result = {}
             base_url = '/api/v1/{}/'.format(self.item.prefix)
+            result = {}
             for k, v in representation.items():
                 if isinstance(v, dict) and v.get('type') is None:
                     metadata = self.item.view_fields.get(self.get_real_field_name(k)) if self.item.view_fields else None

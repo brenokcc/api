@@ -1,7 +1,9 @@
 import traceback
 import time
 import datetime
+from django.apps import apps
 from threading import Thread
+from django.db import connection
 from django.core.cache import cache
 from uuid import uuid1
 from .utils import to_csv_temp_file, to_xls_temp_file
@@ -47,6 +49,9 @@ class Task:
     def to_csv_file(self, rows):
         return to_csv_temp_file(rows)
 
+    def objects(self, model):
+        return apps.get_model(model).objects
+
 
 class TaskRunner(Thread):
 
@@ -63,3 +68,5 @@ class TaskRunner(Thread):
             traceback.print_exc()
             self.task.error = 'Ocorreu um erro: {}'.format(str(e))
             self.task.save()
+        finally:
+            connection.close()
