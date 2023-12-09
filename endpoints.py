@@ -786,7 +786,7 @@ class Application(Endpoint):
         with open(os.path.join(settings.BASE_DIR, 'i18n.yml')) as file:
             i18n = yaml.safe_load(file)
 
-        index_url = '/api/index/' if self.specification.index else '/api/login/'
+        index_url = '/app/index/' if self.specification.index else '/api/login/'
         nocolor = 'radius',
         theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in self.specification.theme.items()}
         oauth = []
@@ -816,6 +816,7 @@ class Application(Endpoint):
             menu=menu,
             oauth=oauth,
             index=index_url,
+            web_push_notification=self.specification.web_push_notification
         )
         url = self.host_url()
         if data['icon'] and data['icon'].startswith('/'):
@@ -836,15 +837,32 @@ class PushSubscription(Endpoint):
         title = 'Subscrever para Notificações'
 
     def post(self):
-        subscription = json.loads(self.getdata('subscription'))
-        if self.objects('api.pushsubscription').filter(user=self.user).exists():
-            self.objects('api.pushsubscription').filter(user=self.user).update(data=subscription)
-        else:
-            self.objects('api.pushsubscription').create(user=self.user, data=subscription)
+        data = json.loads(self.getdata('subscription'))
+        device = self.request.META.get('HTTP_USER_AGENT', '')
+        qs = self.objects('api.pushsubscription').filter(user=self.user, device=device)
+        qs.update(data=data) if qs.exists() else self.objects('api.pushsubscription').create(
+            user=self.user, data=data, device=device
+        )
         self.notify()
 
     def has_permission(self):
         return True
+
+
+class PushNotification(Endpoint):
+    text = TextField(label='Texto')
+
+    class Meta:
+        icon = 'bell'
+        target = 'instance'
+        title = 'Enviar Notificação'
+
+    def post(self):
+        if self.instance.notify(self.getdata('text')):
+            self.notify('Notificação enviada com sucesso.')
+
+    def has_permission(self):
+        return self.user.is_superuser
 
 
 class HealthCheck(Endpoint):

@@ -30,9 +30,10 @@ function pushSubscription(){
                     subscriptionJson = JSON.stringify(subscription);
                     console.log(subscriptionJson);
                     if (subscription) {
-                        alert('Inscrito');
+                        alert('Notificação ativida com sucesso.');
                     } else {
-                        alert('não inscrito');
+                        alert('Problema ao ativar notificações.');
+                        return;
                     }
                     var data = new FormData();
                     data.append('subscription', subscriptionJson);
@@ -40,7 +41,7 @@ function pushSubscription(){
                         console.log(data);
                      }, data);
                 }).catch(function (err) {
-                    alert('Erro');
+                    alert('Problema ao tentar ativar notificações.');
                     console.log('Failed to subscribe the user: ', err);
                 });
             })

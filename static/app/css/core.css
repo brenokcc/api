@@ -408,6 +408,7 @@ a:hover, a:visited{
     padding: 20px;
     display: inline-flex;
     flex-direction: column;
+    max-width: 150px;
 }
 .indicators .item .value{
     font-size: 3rem;
@@ -522,8 +523,8 @@ a:hover, a:visited{
     float:right;
 }
 .header .right .links{
-    padding: 25px;
-    margin-right: 10px;
+    float: right;
+    margin-top: 7px;
 }
 .header .right .user{
     background: #DDD;

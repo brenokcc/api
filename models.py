@@ -65,12 +65,24 @@ class EmailManager(models.Manager):
 
 
 class PushSubscription(models.Model):
-    user = models.OneToOneField('auth.user', verbose_name='Usuário', on_delete=models.CASCADE)
+    user = models.ForeignKey('auth.user', verbose_name='Usuário', on_delete=models.CASCADE)
+    device = models.CharField(verbose_name='Dispositivo')
     data = models.JSONField(verbose_name='Dados da Inscrição')
 
     class Meta:
         verbose_name = 'Inscrição de Notificação'
         verbose_name_plural = 'Inscrições de Notificação'
+
+    def notify(self, text):
+        import os
+        from pywebpush import webpush
+        specification = API.instance()
+        response = webpush(
+            subscription_info=self.data, data='{}>>>{}'.format(specification.title, text),
+            vapid_private_key=os.environ.get('VAPID_PRIVATE_KEY'),
+            vapid_claims={"sub": "mailto:admin@admin.com"}
+        )
+        return response.status_code == 201
 
 
 class Error(models.Model):

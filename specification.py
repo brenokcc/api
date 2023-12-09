@@ -101,6 +101,7 @@ class API:
         self.index = str_to_list(data.get('index'))
         self.groups = data.get('groups', EMPTY_DICT)
         self.dashboard_actions = to_action_list(data, key='dashboard')
+        self.web_push_notification = bool(os.environ.get('VAPID_PRIVATE_KEY'))
         if self.app and not os.path.exists('/app'):
             # settings.MIDDLEWARE.append('api.middleware.AppMiddleware')
             settings.MIDDLEWARE.append('api.middleware.ReactJsMiddleware')

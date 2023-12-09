@@ -3,12 +3,10 @@
 self.addEventListener('push', function (event) {
     console.log('[Service Worker] Push Received.');
     console.log(`[Service Worker] Push had this data: "${event.data.text()}"`);
-
-    const title = 'Hello World!';
+    var tokens = event.data.text().split('>>>');
+    const title = tokens[0]
     const options = {
-        body: event.data.text(),
-        icon: '/static/images/images/icon.png',
-        badge: '/static/images/images/sloth.svg'
+        body: tokens[1],
     };
 
     event.waitUntil(self.registration.showNotification(title, options));
