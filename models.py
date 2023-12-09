@@ -64,6 +64,25 @@ class EmailManager(models.Manager):
         return self.create(from_email=from_email or 'no-replay@mail.com', to=', '.join(to), subject=subject, content=content)
 
 
+class PushSubscription(models.Model):
+    user = models.OneToOneField('auth.user', verbose_name='Usuário', on_delete=models.CASCADE)
+    data = models.JSONField(verbose_name='Dados da Inscrição')
+
+    class Meta:
+        verbose_name = 'Inscrição de Notificação'
+        verbose_name_plural = 'Inscrições de Notificação'
+
+
+class Error(models.Model):
+    user = models.OneToOneField('auth.user', verbose_name='Usuário', on_delete=models.CASCADE, null=True)
+    date = models.DateTimeField('Data/Hora')
+    traceback = models.TextField('Rastreamento')
+
+    class Meta:
+        verbose_name = 'Erro'
+        verbose_name_plural = 'Erros'
+
+
 class Email(models.Model):
     from_email = models.EmailField('Remetente')
     to = models.TextField('Destinatário', help_text='Separar endereços de e-mail por ",".')

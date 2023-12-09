@@ -1,2 +1,2 @@
 VERSION="90b273be7c8711eeb74b2a8c307b6d2d"
-API_URL="http://localhost:8000"
+API_URL="http://dsv-novopnp.container.mec.gov.br"

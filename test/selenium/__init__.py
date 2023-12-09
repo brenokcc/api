@@ -116,7 +116,7 @@ class SeleniumTestCase(LiveServerTestCase):
     def wait(self, seconds=1):
         self.browser.wait(seconds)
 
-    def open(self, url='/api/v1/login/'):
+    def open(self, url='/app/login/'):
         if url == '/':
             self.say('acesse o sistema')
         self.browser.open(url)
@@ -129,7 +129,7 @@ class SeleniumTestCase(LiveServerTestCase):
         self.browser.reload()
 
     def home(self):
-        self.browser.open('/api/v1/dashboard/')
+        self.browser.open('/app/dashboard/')
 
     def enter(self, name, value, submit=False, count=5):
         self.explain('enter', name)
@@ -214,7 +214,7 @@ class SeleniumTestCase(LiveServerTestCase):
     def login(self, username, password):
         self.current_username = username
         if '/login/' not in self.browser.current_url and '/token/' not in self.browser.current_url:
-            self.open('/api/v1/login/')
+            self.open('/app/login/')
         self.enter('Nome do usuário', username)
         self.enter('Senha', password)
         self.submit_form()

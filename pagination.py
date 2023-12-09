@@ -114,7 +114,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
         key = '{}.{}'.format(self.model._meta.app_label, self.model._meta.model_name)
         item = specification.items[key]
         title = self.model._meta.verbose_name_plural
-        base_url = self.context['request'].path if keep_path else '/api/v1/{}/'.format(item.prefix)
+        base_url = self.context['request'].path if keep_path else '/api/{}/'.format(item.prefix)
         actions = []
         filters = []
         search = []

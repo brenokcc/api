@@ -43,7 +43,7 @@ class ReactJsMiddleware:
                 ('<!--', ''), ('-->', ''),
                 ('http://localhost:8000', host_url),
                 ('90b273be7c8711eeb74b2a8c307b6d2d', uuid1().hex),
-                ('/static/images/icon.png', specification.icon)
+                ('/api/static/images/icon.png', specification.icon)
             ]
             ReactJsMiddleware.ICON_URL = specification.icon
             ReactJsMiddleware.INDEX_FILE_CONTENT = open(
@@ -56,10 +56,10 @@ class ReactJsMiddleware:
             return HttpResponseRedirect(ReactJsMiddleware.ICON_URL)
 
         is_opt = request.method == 'OPTIONS'
-        is_api = request.path == '/' or request.path.startswith('/api/v1/') or request.path == '/app/login/govbr/'
+        is_app = request.path == '/' or request.path.startswith('/app/') or request.path == '/app/login/govbr/'
         is_json = request.META.get('HTTP_ACCEPT') == 'application/json'
         is_raw = 'raw' in request.GET
-        if is_api and not is_json and not is_raw and not is_opt:
+        if is_app and not is_json and not is_raw and not is_opt:
             response = HttpResponse(ReactJsMiddleware.INDEX_FILE_CONTENT)
         else:
             response = self.get_response(request)

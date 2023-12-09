@@ -19,7 +19,7 @@ class ApiTestCase(LiveServerTestCase):
         User.objects.create_superuser(username, password=password)
 
     def login(self, username, password):
-        response = self.client.post(f'{BASE_URL}/api/v1/login/', data=dict(username='admin', password='123'))
+        response = self.client.post(f'{BASE_URL}/api/login/', data=dict(username='admin', password='123'))
         data = response.json()
         self.headers = {'Authorization': 'Token {}'.format(data.get('token'))}
 

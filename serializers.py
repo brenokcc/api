@@ -156,9 +156,9 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
             host_url = "{}://{}".format(
                 request.META.get('X-Forwarded-Proto', request.scheme), request.get_host()
             )
-            if type(value) == Link and value['url'] and value['url'].startswith('/media'):
+            if type(value) == Link and value['url'] and value['url'].startswith('/api/media'):
                 value['url'] = '{}{}'.format(host_url, value['url'])
-            if type(value) == Image and value['src'] and value['src'].startswith('/media'):
+            if type(value) == Image and value['src'] and value['src'].startswith('/api/media'):
                 value['src'] = '{}{}'.format(host_url, value['src'])
         return value
     if isinstance(value, models.QuerySet) and value._iterable_class != ModelIterable:
@@ -201,7 +201,7 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
             data['autoreload'] = value.autoreload
         return data
     elif isinstance(value, FieldFile):
-        return dict(type='file', url='/media{}'.format(value.url), name=value.name.split('/')[-1]) if value else None
+        return dict(type='file', url='/api/media{}'.format(value.url), name=value.name.split('/')[-1]) if value else None
     else:
         return value if is_relation else dict(value=value)
 
@@ -500,7 +500,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             representation[k] = v
 
         if specification.app and getattr(instance, '_wrap', False):
-            base_url = '/api/v1/{}/'.format(self.item.prefix)
+            base_url = '/api/{}/'.format(self.item.prefix)
             result = {}
             for k, v in representation.items():
                 if isinstance(v, dict) and v.get('type') is None:

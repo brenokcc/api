@@ -1,6 +1,56 @@
 var reloadable = null;
 var messageTimeout = null
 
+const applicationServerPublicKey = 'BLoLJSopQbe04v_zpegJmayhH2Px0EGzrFIlM0OedSOTYsMpO5YGmHOxbpPXdM09ttIuDaDTI86uC85JXZPpEtA';
+let swRegistration = null;
+
+function urlB64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+function pushSubscription(){
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        //console.log('Service Worker and Push is supported');
+        navigator.serviceWorker.register('/api/static/app/js/sw.js')
+            .then(function (swRegistration) {
+                console.log('Service Worker is registered');
+                const applicationServerKey = urlB64ToUint8Array(applicationServerPublicKey);
+                swRegistration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                }).then(function (subscription) {
+                    console.log(subscription);
+                    subscriptionJson = JSON.stringify(subscription);
+                    console.log(subscriptionJson);
+                    if (subscription) {
+                        console.log('inscrito');
+                    } else {
+                        console.log('não inscrito');
+                    }
+                    var data = new FormData();
+                    data.append('subscription', subscriptionJson);
+                    request('POST', '/api/push_subscription/', function(data){
+                        console.log(data);
+                     }, data);
+                }).catch(function (err) {
+                    console.log('Failed to subscribe the user: ', err);
+                });
+            })
+            .catch(function (error) {
+                console.error('Service Worker Error', error);
+            });
+    } else {
+        console.warn('Push messaging is not supported');
+    }
+}
+
 document.addEventListener("DOMContentLoaded", function(e) {
 
 });
@@ -19,6 +69,7 @@ function request(method, url, callback, data){
     var headers = {'Accept': 'application/json'}
     if(token) headers['Authorization'] = 'Token '+token;
     url = url.replace(document.location.origin, '');
+    url = url.replace('/app/', '/api/')
     if(url.indexOf(API_URL) == -1) url = API_URL + url;
     var params = {method: method, headers: new Headers(headers), ajax: 1};
     if(data) params['body'] = data;
@@ -36,7 +87,7 @@ function request(method, url, callback, data){
             if(contentType=='application/json'){
                 var data = JSON.parse(result||'{}');
                 if(data.token){
-                    if(document.location.pathname=='/api/v1/login/'){
+                    if(document.location.pathname=='/app/login/'){
                         localStorage.removeItem("application");
                     }
                     localStorage.setItem('token', data.token);
@@ -44,7 +95,7 @@ function request(method, url, callback, data){
                 }
                 if(data.redirect){
                     if(data.message) setCookie('message', data.message);
-                    document.location.href = data.redirect;
+                    document.location.href = data.redirect.replace('/api/', '/app/');
                 } else {
                     if(data.message && !data.task)  showMessage(data.message);
                     callback(data, httpResponse);

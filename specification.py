@@ -52,7 +52,7 @@ class API:
                 icon = icon,
                 actions = set(str_to_list(v.get('actions'))),
                 prefix = prefix,
-                url = '/api/v1/{}/'.format(prefix),
+                url = '/api/{}/'.format(prefix),
                 entrypoint = str_to_list(v.get('entrypoint')),
                 filters = str_to_list(v.get('filters')),
                 search = to_search_list(v.get('search')),

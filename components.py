@@ -97,8 +97,9 @@ class Warning(dict):
 
 
 class Table(dict):
-    def __init__(self, subset=None, pagination=None):
+    def __init__(self, title, subset=None, pagination=None):
         self['type'] = 'table'
+        self['title'] = title
         self['actions'] = []
         self['subsets'] = []
         self['subset'] = subset

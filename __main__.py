@@ -156,7 +156,7 @@ services:
       dockerfile: Dockerfile
       target: test
     healthcheck:
-      test: curl -s http://localhost:8000/api/v1/health_check/?raw= | grep status
+      test: curl -s http://localhost:8000/api/health_check/?raw= | grep status
     volumes:
       - .git:/opt/git
     environment:
@@ -206,10 +206,10 @@ API_YML = '''api:
   lang: pt-br
   title: Sloth Framework
   subtitle: Take your time!
-  icon: /static/images/sloth2.svg
-  logo: /static/images/sloth.svg
+  icon: /api/static/images/sloth2.svg
+  logo: /api/static/images/sloth.svg
   footer:
-    logo: /static/images/sloth2.svg
+    logo: /api/static/images/sloth2.svg
     version: 1.0.1
   theme:
     primary: 1351b4

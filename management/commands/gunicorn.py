@@ -34,6 +34,6 @@ class Command(BaseCommand):
         call_command('collectstatic', verbosity=0, interactive=False)
         application_name = options['aplication_name'][0]
         workers = (multiprocessing.cpu_count() * 2) + 1
-        options = getattr(settings, 'GUNICORN', dict(bind='0.0.0.0:8000', workers=2, timeout=300))
+        options = getattr(settings, 'GUNICORN', dict(bind='0.0.0.0:8000', workers=2, timeout=300, limit_request_line=8190))
         print('Starting gunicorn with options {}'.format(options))
         StandaloneApplication('{}.wsgi:application'.format(application_name), options).run()

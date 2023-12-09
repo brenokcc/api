@@ -13,10 +13,10 @@ from . import doc
 
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='/api/v1/login/', permanent=False)),
-    path('api/v1/', include(router.urls)),
-] + static('/media/', document_root=settings.MEDIA_ROOT) \
-  + static('/static/', document_root=settings.STATIC_ROOT) \
+    path('', RedirectView.as_view(url='/api/login/', permanent=False)),
+    path('api/', include(router.urls)),
+] + static('/api/media/', document_root=settings.MEDIA_ROOT) \
+  + static('/api/static/', document_root=settings.STATIC_ROOT) \
   + ReactJsMiddleware.urlpatterns() \
   + doc.urlpatterns
 

@@ -7,6 +7,7 @@ import re
 import requests
 import datetime
 import traceback
+import subprocess
 from uuid import uuid1
 from api.utils import related_model
 from django.apps import apps
@@ -424,7 +425,7 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         return default
 
     def get_url(self):
-        url = '/api/v1/{}/'.format(
+        url = '/api/{}/'.format(
             to_snake_case(type(self).__name__)
         ) if self.get_target() is None else self.request.path
         querystring = self.request.GET.urlencode()
@@ -570,7 +571,7 @@ class EndpointSet(Endpoint):
         only = self.request.GET.get('only')
         for cls in self.endpoints:
             cls = ACTIONS[cls] if isinstance(cls, str) else cls
-            self.request.path = '/api/v1/{}/'.format(cls.get_api_name())
+            self.request.path = '/api/{}/'.format(cls.get_api_name())
             action = cls(context=self.context, instance=self.request.user)
             if action.check_permission() and (only is None or cls.get_api_name()==only):
                 if action.metadata('sync', True) or action.is_cached() or cls.get_api_name()==only:
@@ -630,6 +631,7 @@ class Oauth(Endpoint):
         target = 'api'
 
     def get(self):
+        error = {}
         code = self.getdata('code')
         specification = API.instance()
         for name, provider in specification.oauth.items():
@@ -640,7 +642,7 @@ class Oauth(Endpoint):
             )
             response = requests.post(provider['access_token_url'], data=access_token_request_data, verify=False)
             if response.status_code != 200:
-                print('Logging with {} failed: {}'.format(name, response.text))
+                error[name] = response.text
                 continue
             data = json.loads(response.text)
             headers = {
@@ -664,11 +666,13 @@ class Oauth(Endpoint):
                     token = Token.objects.get_or_create(user=user)[0]
                     return dict(
                         token=token.key, user=dict(id=user.id, username=user.username, is_superuser=user.is_superuser),
-                        redirect='/api/v1/dashboard/', message='Autenticação realizada com sucesso.'
+                        redirect='/api/dashboard/', message='Autenticação realizada com sucesso.'
                     )
                 else:
                     return dict(type='info', text='Usuário "{}" inexistente.'.format(username))
-        return dict(type='info', text='Ocorreu um erro ao realizar login.')
+            else:
+                error[name] = response.text
+        return dict(type='info', text='Ocorreu um erro ao realizar login: {}'.format(json.dumps(error)))
 
     def check_permission(self):
         return True
@@ -690,7 +694,7 @@ class Login(Endpoint):
         token = Token.objects.get_or_create(user=user)[0]
         return dict(
             token=token.key, user=dict(id=user.id, username=user.username, is_superuser=user.is_superuser),
-            redirect='/api/v1/dashboard/', message='Autenticação realizada com sucesso.'
+            redirect='/api/dashboard/', message='Autenticação realizada com sucesso.'
         )
 
 
@@ -722,7 +726,7 @@ class Manifest(Endpoint):
                 "name": specification.title,
                 "short_name": specification.title,
                 "lang": 'pt-BR',
-                "start_url": "/api/v1/index/",
+                "start_url": "/",
                 "scope": "/",
                 "display": "standalone",
                 "icons": [{
@@ -762,7 +766,7 @@ class Application(Endpoint):
                 if serializer.check_permission():
                     label = cls.get_name().title().strip()
                     icon = (cls.get_icon() or 'dot-circle') if i == 0 else None
-                    subitem = dict(icon=icon, label=label, url='/api/v1/{}/'.format(cls.get_api_name()))
+                    subitem = dict(icon=icon, label=label, url='/api/{}/'.format(cls.get_api_name()))
                     menu.append(subitem)
         else:
             label=entry['label']
@@ -782,7 +786,7 @@ class Application(Endpoint):
         with open(os.path.join(settings.BASE_DIR, 'i18n.yml')) as file:
             i18n = yaml.safe_load(file)
 
-        index_url = '/api/v1/index/' if self.specification.index else '/api/v1/login/'
+        index_url = '/api/index/' if self.specification.index else '/api/login/'
         nocolor = 'radius',
         theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in self.specification.theme.items()}
         oauth = []
@@ -823,6 +827,23 @@ class Application(Endpoint):
         return data
 
     def check_permission(self):
+        return True
+
+
+class PushSubscription(Endpoint):
+
+    class Meta:
+        title = 'Subscrever para Notificações'
+
+    def post(self):
+        subscription = json.loads(self.getdata('subscription'))
+        if self.objects('api.pushsubscription').filter(user=self.user).exists():
+            self.objects('api.pushsubscription').filter(user=self.user).update(data=subscription)
+        else:
+            self.objects('api.pushsubscription').create(user=self.user, data=subscription)
+        self.notify()
+
+    def has_permission(self):
         return True
 
 
@@ -879,7 +900,7 @@ class ActivateRole(Endpoint):
         qs.update(active=False)
         qs.filter(id=self.instance.id).update(active=True)
         self.notify('Papel ativado com sucesso')
-        self.redirect('/api/v1/dashboard/')
+        self.redirect('/api/dashboard/')
 
     def check_permission(self):
         return self.user.is_superuser or self.user.username == self.instance.username
@@ -976,3 +997,25 @@ class TaskProgress(Endpoint):
 
     def check_permission(self):
         return True
+
+
+class Shell(Endpoint):
+    script = TextField(label='')
+
+    class Meta:
+        icon = 'cast'
+        title = 'Shell'
+        modal = False
+
+    def post(self):
+        script = self.getdata('script')
+        p = subprocess.Popen(
+            ['python', 'manage.py', 'shell', '-c', script],
+            stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = p.communicate()
+        output = '{}{}'.format(stdout.decode(), stderr.decode())
+        return dict(type='shell', output=output)
+
+    def has_permission(self):
+        return self.user.is_superuser

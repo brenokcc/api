@@ -96,13 +96,13 @@ function autocomplete(name, placeholder, multiple, url, callback, onselect) {
             if(tokens.length>1) var usp = new URLSearchParams(tokens[1]);
             else var usp = new URLSearchParams();
             usp.set('choices_field', name.split('__0.')[0]);
-            usp.set('choices_search', val);
+            usp.set('choices_search', e.type=='click' ? "" : val);
             var form = inp.closest('form');
             if(form){
                 var selects = form.querySelectorAll('select');
                 for(var j=0; j<selects.length; j++){
                     usp.delete(selects[j].name);
-                    if(selects[j].selectedIndex>=0){
+                    if(name.indexOf(selects[j].name)!=0 && selects[j].selectedIndex>=0){
                         if(selects[j].options[selects[j].selectedIndex].value){
                             usp.set(selects[j].name, selects[j].options[selects[j].selectedIndex].value);
                         }
