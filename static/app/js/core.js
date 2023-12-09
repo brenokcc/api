@@ -30,9 +30,9 @@ function pushSubscription(){
                     subscriptionJson = JSON.stringify(subscription);
                     console.log(subscriptionJson);
                     if (subscription) {
-                        console.log('inscrito');
+                        alert('Inscrito');
                     } else {
-                        console.log('não inscrito');
+                        alert('não inscrito');
                     }
                     var data = new FormData();
                     data.append('subscription', subscriptionJson);
@@ -40,14 +40,16 @@ function pushSubscription(){
                         console.log(data);
                      }, data);
                 }).catch(function (err) {
+                    alert('Erro');
                     console.log('Failed to subscribe the user: ', err);
                 });
             })
             .catch(function (error) {
+                alert('Erro');
                 console.error('Service Worker Error', error);
             });
     } else {
-        console.warn('Push messaging is not supported');
+        alert('Push messaging is not supported');
     }
 }
 
