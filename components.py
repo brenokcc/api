@@ -8,7 +8,10 @@ DANGER = 'danger'
 
 
 class Image(dict):
-    def __init__(self, src, width=200, height=200, round=False):
+    def __init__(self, src, width=None, height=None, round=False):
+        if width is None and height is None:
+            width = 200
+            height = 200
         self['type'] = 'image'
         self['src'] = src
         self['width'] = width

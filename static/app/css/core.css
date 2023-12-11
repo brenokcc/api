@@ -46,6 +46,7 @@ a:hover, a:visited{
 .right{float: right}
 .clear {clear: both}
 .content{
+    padding-top: 5px;
     padding-left: 20px;
     padding-right: 20px;
 }
@@ -408,7 +409,7 @@ a:hover, a:visited{
     padding: 20px;
     display: inline-flex;
     flex-direction: column;
-    max-width: 150px;
+    max-width: 250px;
 }
 .indicators .item .value{
     font-size: 3rem;

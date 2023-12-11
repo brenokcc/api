@@ -59,6 +59,7 @@ class API:
                 ordering = str_to_list(v.get('ordering')),
                 relations = {},
                 related_fieldsets = {},
+                add_hide = to_add_hide(endpoints.get('add')),
                 add_fieldsets = to_fieldset_dict(endpoints.get('add')),
                 edit_fieldsets=to_fieldset_dict(endpoints.get('edit')),
                 list_display = to_fields(endpoints.get('list'), id_required=True),
@@ -229,6 +230,16 @@ def str_to_width_list(s):
                 l.append((l1, 100))
     return l
 
+def to_add_hide(add_metadata):
+    if isinstance(add_metadata, dict):
+        hide_metadata = add_metadata.get('hide')
+        if isinstance(hide_metadata, dict):
+            add_hide = {}
+            for k, v in hide_metadata.items():
+                add_hide[k] = to_lookups_dict(hide_metadata, k)
+            return add_hide
+    return EMPTY_DICT
+
 def to_fieldset_dict(data, relation_field_names=()):
     fieldsets = {} if data else EMPTY_DICT
     if isinstance(data, str):
@@ -261,9 +272,9 @@ def to_menu_items(menu, items):
             menu.append(subitem)
     return menu
 
-def to_lookups_dict(value):
+def to_lookups_dict(value, key='requires'):
     if isinstance(value, dict):
-        requires = value.get('requires') or EMPTY_DICT
+        requires = value.get(key) or EMPTY_DICT
         lookups = {}
         if isinstance(requires, str):
             lookups[None] = {}

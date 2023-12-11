@@ -156,9 +156,9 @@ def serialize_value(value, context, output=None, is_relation=False, relation_nam
             host_url = "{}://{}".format(
                 request.META.get('X-Forwarded-Proto', request.scheme), request.get_host()
             )
-            if type(value) == Link and value['url'] and value['url'].startswith('/api/media'):
+            if type(value) == Link and value['url'] and value['url'].startswith('/api/'):
                 value['url'] = '{}{}'.format(host_url, value['url'])
-            if type(value) == Image and value['src'] and value['src'].startswith('/api/media'):
+            if type(value) == Image and value['src'] and value['src'].startswith('/api/'):
                 value['src'] = '{}{}'.format(host_url, value['src'])
         return value
     if isinstance(value, models.QuerySet) and value._iterable_class != ModelIterable:
@@ -404,6 +404,13 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             self.remove_unrequested_fields()
         # threadlocals.data.request = self.context.get('request')
         #self.fields['reitor'].style['base_template'] = 'autocomplete.html'
+        if self.item.add_hide and self.context['view'] and self.context['view'].action in ('create', 'update'):
+            for k, lookups in self.item.add_hide.items():
+                pks = permissions.apply_lookups(
+                    self.fields[k].queryset, lookups, self.context['request'].user
+                ).values_list('pk', flat=True)[0:2]
+                if len(pks) == 1:
+                    self.fields[k].initial = pks[0]
 
     def get_real_field_name(self, name):
         for k, field in self.fields.items():

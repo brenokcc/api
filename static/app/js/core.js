@@ -101,7 +101,7 @@ function request(method, url, callback, data){
                     document.location.href = data.redirect.replace('/api/', '/app/');
                 } else {
                     if(data.message && !data.task)  showMessage(data.message);
-                    callback(data, httpResponse);
+                    if(callback) callback(data, httpResponse);
                 }
             } else if(contentType.indexOf('text')<0 || contentType.indexOf('csv')>=0){
                 var file = window.URL.createObjectURL(new Blob( [ new Uint8Array(result) ], { type: contentType }));
@@ -115,15 +115,16 @@ function request(method, url, callback, data){
                 else if (contentType.indexOf('png') >= 0) a.download = 'Download.png';
                 document.body.appendChild(a);
                 a.click();
-                callback({}, httpResponse);
+                if(callback) callback({}, httpResponse);
             } else {
-                callback(result, httpResponse);
+                if(callback) callback(result, httpResponse);
             }
         }
     );
 }
 
-function closeDialogs(){
+function closeDialogs(message){
+    if(message!=null) showMessage(message);
     var dialogs = document.getElementsByTagName('dialog');
     for(var i=0; i<dialogs.length; i++){
         if(i==dialogs.length-1){
@@ -133,7 +134,7 @@ function closeDialogs(){
             dialog.remove();
             if(i==0){
                 $('.layer').hide();
-                if(window.reloader) window.reloader();
+                if(window.reloader) window.reloader(message);
             } else {
                 dialogs[i-1].style.display = "block";
             }

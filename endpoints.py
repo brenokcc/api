@@ -115,7 +115,7 @@ def actions_metadata(source, actions, context, base_url, instances=(), viewer=No
             else:
                 url = f'{base_url}{{id}}/{name}/'
             ids = serializer.test_permission(instances)
-            append = True
+            append = bool(ids)
         if append:
             if qualified_name == 'edit' and related_field:
                 url = '{}?rel={}'.format(url, related_field)
@@ -263,8 +263,9 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
             return False
         return self.is_action_view() or self.request.method != 'GET'
 
-    def execute(self, task):
+    def execute(self, task, message=None):
         self.user_task = task.key
+        self.user_message = message if message else self.user_message
         TaskRunner(task).start()
 
     def load(self):
@@ -786,7 +787,7 @@ class Application(Endpoint):
         with open(os.path.join(settings.BASE_DIR, 'i18n.yml')) as file:
             i18n = yaml.safe_load(file)
 
-        index_url = '/app/index/' if self.specification.index else '/api/login/'
+        index_url = '/app/index/' if self.specification.index else '/app/login/'
         nocolor = 'radius',
         theme = {k: v if k in nocolor else '#{}'.format(v).strip() for k, v in self.specification.theme.items()}
         oauth = []
