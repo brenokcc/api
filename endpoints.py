@@ -846,7 +846,7 @@ class PushSubscription(Endpoint):
         )
         self.notify()
 
-    def has_permission(self):
+    def check_permission(self):
         return True
 
 
@@ -861,9 +861,6 @@ class PushNotification(Endpoint):
     def post(self):
         if self.instance.notify(self.getdata('text')):
             self.notify('Notificação enviada com sucesso.')
-
-    def has_permission(self):
-        return self.user.is_superuser
 
 
 class HealthCheck(Endpoint):
@@ -1035,6 +1032,3 @@ class Shell(Endpoint):
         stdout, stderr = p.communicate()
         output = '{}{}'.format(stdout.decode(), stderr.decode())
         return dict(type='shell', output=output)
-
-    def has_permission(self):
-        return self.user.is_superuser
