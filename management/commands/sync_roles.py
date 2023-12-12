@@ -13,4 +13,5 @@ class Command(BaseCommand):
             if item.roles:
                 model = apps.get_model(k)
                 for obj in model.objects.all():
+                    print(obj)
                     obj.save()

@@ -137,8 +137,27 @@ class UserCache(object):
     def key(self, k):
         return '{}-{}'.format(self.user.username, k)
 
+    def has_key(self, k):
+        return cache.has_key(self.key(k))
+
     def delete(self, k):
         return cache.delete(self.key(k))
+
+    def clear(self):
+        prefix = self.key('')
+        if hasattr(cache, 'keys'):
+            keys = cache.keys('{}*'.format(prefix))
+            for key in keys:
+                print('Deleting redis cache key {}...'.format(key))
+            cache.delete_many(keys=keys)
+        else:
+            delete = []
+            for key in list(cache._cache.keys()):
+                if key.startswith(':1:{}'.format(prefix)):
+                    delete.append(key)
+            for key in delete:
+                print('Deleting mem cache key {}...'.format(key))
+                cache.delete(key)
 
 
 class EnpointMetaclass(serializers.SerializerMetaclass):
@@ -352,8 +371,8 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         self.user_message = str(message).replace('\n', '<br>')
 
     def redirect(self, url):
-        if url.startswith('/'):
-            url = '{}{}'.format(self.host_url(), url)
+        # if url.startswith('/'):
+        #     url = '{}{}'.format(self.host_url(), url)
         raise JsonResponseReadyException(dict(redirect=url, message=self.user_message))
 
     @property
@@ -401,19 +420,19 @@ class Endpoint(serializers.Serializer, metaclass=EnpointMetaclass):
         return False
 
     def is_cached(self):
-        key = '{}.{}'.format(self.context['request'].user.id, type(self).__name__)
-        return cache.has_key(key)
+        key = type(self).__name__
+        return self.cache.has_key(key)
 
     def get(self):
         return None
 
     def get_result(self):
         if self.metadata('cache'):
-            ley = '{}.{}'.format(self.context['request'].user.id, type(self).__name__)
-            value = cache.get(ley)
+            key = type(self).__name__
+            value = self.cache.get(key)
             if value is None:
                 value = self.get() if self.is_action_view() else self.post()
-                cache.set(ley, value)
+                self.cache.set(key, value)
         else:
             value = self.get() if self.is_action_view() else self.post()
         return value
@@ -709,7 +728,8 @@ class Logout(Endpoint):
         target = 'api'
 
     def get(self):
-        self.redirect('/')
+        self.cache.clear()
+        self.redirect('/?logout=1')
 
     def check_permission(self):
         return True
@@ -1007,7 +1027,7 @@ class TaskProgress(Endpoint):
 
     def get(self):
         data = cache.get(self.request.GET.get('key'), None)
-        if data['file_path']:
+        if data and data['file_path']:
             return open(data['file_path'], 'rb')
         return data
 
