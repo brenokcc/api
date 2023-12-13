@@ -1052,3 +1052,25 @@ class Shell(Endpoint):
         stdout, stderr = p.communicate()
         output = '{}{}'.format(stdout.decode(), stderr.decode())
         return dict(type='shell', output=output)
+
+
+class SetPeerId(Endpoint):
+    id = QueryField(default=None)
+
+    def get(self):
+        cache.set(f'{self.user.username}peer', self.getdata('id'))
+        return {'id': cache.get(f'{self.user.username}peer')}
+
+    def check_permission(self):
+        return self.user.is_authenticated
+
+
+class GetPeerId(Endpoint):
+    username = QueryField(default=None)
+
+    def get(self):
+        username = self.getdata('username')
+        return {'id': cache.get(f'{username}peer')}
+
+    def check_permission(self):
+        return self.user.is_authenticated

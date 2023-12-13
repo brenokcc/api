@@ -146,6 +146,7 @@ class Banner(dict):
         self['type'] = 'banner'
         self['src'] = src
 
+
 class Map(dict):
     def __init__(self, latitude, longitude, width='100%', height=400):
         self['type'] = 'map'
@@ -164,3 +165,10 @@ class Steps(dict):
     def append(self, name, done):
         number = len(self['steps']) + 1
         self['steps'].append(dict(number=number, name=name, done=bool(done)))
+
+
+class WebConf(dict):
+    def __init__(self, caller, receiver):
+        self['type'] = 'webconf'
+        self['caller'] = caller
+        self['receiver'] = receiver
