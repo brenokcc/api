@@ -373,6 +373,11 @@ a:hover, a:visited{
     margin-top: 20px;
     height: 40px;
 }
+.pagination .input{
+    border: solid 1px var(--primary-color);
+    padding: 5px;
+    width: 40px;
+}
 .pagination select{
     color: var(--primary-color);
     font-size: 15px;
@@ -948,7 +953,16 @@ select {
     -webkit-appearance:none; /* Safari and Chrome */
     appearance:none;
 }
-
+.loaderContainer{
+    position:fixed;
+    width: 100%;
+}
+.loaderValue{
+    background-color: var(--primary-color);
+    height: 3px;
+    width: 0px;
+    z-index: 999999;
+}
 .autocomplete {
   /*the container must be positioned relative:*/
   position: relative;
@@ -1022,8 +1036,12 @@ select {
     line-height: 2;
     height: 45px;
 }
-input:read-only{
-
+input:not([type="radio"]):not([type="checkbox"]):read-only{
+    border: 0px;
+    padding-left: 0px;
+}
+input:not([type="radio"]):not([type="checkbox"]):read-only:hover{
+    background-color: transparent;
 }
 input[type=file]{
     width: 0;

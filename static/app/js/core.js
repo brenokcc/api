@@ -58,6 +58,24 @@ document.addEventListener("DOMContentLoaded", function(e) {
 
 });
 
+function animate(){
+	if($('.loaderValue').width()>0 && $('.loaderContainer').width()>$('.loaderValue').width()){
+		$('.loaderValue').width($('.loaderValue').width()+$('.loaderContainer').width()/100);
+		setTimeout(animate, 25);
+	} else {
+		$('.loaderValue').width(0);
+	}
+}
+function startAnimation(){
+    if($('.loaderValue').width()==0){
+        $('.loaderValue').width(1);
+	    animate();
+	}
+}
+function stopAnimation(){
+	$('.loaderValue').width(0);
+}
+
 function scrollIntoViewWithOffset(element){
   window.scrollTo({
     behavior: 'smooth',
@@ -68,6 +86,7 @@ function scrollIntoViewWithOffset(element){
 }
 
 function request(method, url, callback, data){
+    startAnimation()
     const token = localStorage.getItem('token');
     var headers = {'Accept': 'application/json'}
     if(token) headers['Authorization'] = 'Token '+token;
@@ -87,6 +106,7 @@ function request(method, url, callback, data){
             else response.text()
         }
     ).then(result => {
+            stopAnimation();
             if(contentType=='application/json'){
                 var data = JSON.parse(result||'{}');
                 if(data.token){

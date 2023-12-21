@@ -114,8 +114,8 @@ class Table(dict):
     def add_subset(self, name, label, count):
         self['subsets'].append(dict(name=name, label=label, count=count))
 
-    def add_action(self, name, label, icon=None):
-        self['actions'].append(dict(name=name, label=label, icon=icon))
+    def add_action(self, name, label, icon=None, batch=True):
+        self['actions'].append(dict(name=name, label=label, icon=icon, batch=batch))
 
     def add_flag(self, name, label, checked=False):
         self['flags'].append(dict(name=name, label=label, checked=checked))
