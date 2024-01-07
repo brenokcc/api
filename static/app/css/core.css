@@ -142,7 +142,7 @@ a:hover, a:visited{
 .steps .step{
     list-style: none;
     display: inline-block;
-    width: 150px;
+    width: 100px;
     vertical-align: top;
 }
 .steps .step:not(:last-child) .icon::after {
@@ -150,20 +150,20 @@ a:hover, a:visited{
   display: block;
   height: 2px;
   background: var(--primary-color);
-  width: 150px;
-  margin-left: 46px;
-  margin-top: -15px;
+  width: 100px;
+  margin-left: 23px;
+  margin-top: -7.5px;
 }
 .steps .step .icon{
-    width: 50px;
-    height: 50px;
+    width: 25px;
+    height: 25px;
     border-radius: 50%;
     color: white;
     vertical-align: middle;
     text-align: center;
     margin:auto;
     border: solid 2px var(--primary-color);
-    font-size: 1.7rem;
+    font-size: 0.8rem;
 }
 .steps .step .icon.active{
     background-color: var(--primary-color);

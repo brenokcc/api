@@ -357,7 +357,7 @@ class ModelViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             serializer = self.get_serializer(instance, data=instance.__dict__)
             serializer.is_valid()
-            name = '{}_{}'.format('Editar', self.model._meta.verbose_name)
+            name = '{}_{}'.format('Excluir', self.model._meta.verbose_name)
             form = dict(type='form', icon='trash', method='delete', name=name, action=request.path.replace('delete/', ''), fields=serialize_fields(serializer, None, request))
             return Response(form)
 
@@ -502,7 +502,7 @@ def create_relation_func(func_name, relation):
     def func(self, request, **kwargs):
         instance = self.model.objects.get(pk=kwargs['pk'])
         serializer = self.get_serializer_class()(
-            data=request.POST or None, context=dict(request=request, view=self)
+            data=request.data, context=dict(request=request, view=self)
         )
 
         choices = request.query_params.get('choices_field')

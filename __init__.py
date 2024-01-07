@@ -61,6 +61,15 @@ class ModelMixin(object):
 
     def get_text(self):
         return self.__str__()
+    
+    def has_add_permission(self, user):
+        return None
+    
+    def has_edit_permission(self, user):
+        return None
+    
+    def has_delete_permission(self, user):
+        return None
 
 
 class QuerySet(models.QuerySet):

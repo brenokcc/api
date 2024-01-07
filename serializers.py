@@ -24,8 +24,10 @@ from .exceptions import JsonResponseReadyException
 NONE = '__NONE__'
 
 MASKS = dict(
-    telefone='(99) 99999-9999',
+    cpf_cnpj='999.999.999-99|99.999.999/9999-99',
     cpf='999.999.999-99',
+    cnpj='99.999.999/9999-99',
+    telefone='(99) 99999-9999',
 )
 
 def serialize_fields(serializer, fieldsets=None, request=None):
@@ -504,7 +506,7 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                     k = k[4:]
                 elif '.' in k:
                     k = ACTIONS[k].get_api_name()
-            representation[k] = v
+                representation[k] = v
 
         if specification.app and getattr(instance, '_wrap', False):
             base_url = '/api/{}/'.format(self.item.prefix)
