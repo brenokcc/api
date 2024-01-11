@@ -89,7 +89,7 @@ function request(method, url, callback, data){
     startAnimation()
     const token = localStorage.getItem('token');
     var headers = {'Accept': 'application/json'}
-    if(token) headers['Authorization'] = 'Token '+token;
+    if(token && url.indexOf('/logout/')==-1) headers['Authorization'] = 'Token '+token;
     url = url.replace(document.location.origin, '');
     url = url.replace('/app/', '/api/')
     if(url.indexOf(API_URL) == -1) url = API_URL + url;

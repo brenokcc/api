@@ -7,6 +7,7 @@ from . import permissions
 from .specification import API
 from .endpoints import actions_metadata
 from .utils import to_snake_case, to_choices, to_calendar
+from django.template.loader import render_to_string
 from .exceptions import JsonResponseReadyException
 
 
@@ -120,6 +121,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
         search = []
         subsets = []
         aggregations = []
+        template = None
         if metadata:
             if self.subset and 'subsets' in metadata:
                 subset_metadata = metadata['subsets'][self.subset]
@@ -131,6 +133,7 @@ class PageNumberPagination(pagination.PageNumberPagination):
                         metadata['requires'] = subset_metadata['requires']
                     if len(subset_metadata['filters']) > 1:
                         metadata['filters'] = subset_metadata['filters']
+            template = metadata.get('template')
             title = metadata.get('title') or title
             related_field = metadata.get('related_field')
             relation_name = metadata.get('name') or relation_name
@@ -182,7 +185,8 @@ class PageNumberPagination(pagination.PageNumberPagination):
             response.data.update(subsets=subsets, subset=self.context['request'].GET.get('subset'))
         if aggregations:
             response.data.update(aggregations=aggregations)
-
+        if template:
+            response.data.update(html=render_to_string(template, response.data))
         response.data.update(page_size=self.page_size, page_sizes=[5, 10, 15, 20, 25, 50, 100])
 
         if relation_name:
@@ -190,7 +194,6 @@ class PageNumberPagination(pagination.PageNumberPagination):
                 if response.data[k]:
                     if 'only=' not in response.data[k]:
                         response.data[k] = '{}&only={}'.format(response.data[k], relation_name)
-        print(response.data['url'])
         return response
 
 

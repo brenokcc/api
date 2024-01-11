@@ -40,6 +40,7 @@ class ReactJsMiddleware:
             specification = API.instance()
             host_url = "{}://{}".format(request.META.get('X-Forwarded-Proto', request.scheme), request.get_host())
             replaces = [
+                ('</head>', '<link rel="stylesheet" href="/api/static/css/style.css"></head>'),
                 ('<!--', ''), ('-->', ''),
                 ('http://localhost:8000', host_url),
                 ('90b273be7c8711eeb74b2a8c307b6d2d', uuid1().hex),

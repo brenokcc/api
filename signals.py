@@ -7,6 +7,8 @@ from .utils import related_model
 def post_save_func(sender, **kwargs):
     pk = kwargs['instance'].pk
     model = '{}.{}'.format(sender._meta.app_label, sender._meta.model_name)
+    existing = set(Role.objects.filter(model=model, value=pk).values_list('pk', flat=True))
+    creating = set()
     for name, role in sender.__roles__.items():
         scopes = role.get('scopes')
         values = [role[k] for k in ('username', 'email', 'inactive', 'active') if k in role]
@@ -37,17 +39,18 @@ def post_save_func(sender, **kwargs):
                         scope_model = sender if lookup in ('id', 'pk') else related_model(sender, lookup)
                         model = '{}.{}'.format(scope_model._meta.app_label, scope_model._meta.model_name)
                         for value in sender.objects.filter(pk=pk).values_list(lookup, flat=True):
-                            Role.objects.get_or_create(
+                            creating.add(Role.objects.get_or_create(
                                 username=username, name=name, model=model, scope=scope, value=value
-                            )
+                            )[0].id)
                 else:
-                    Role.objects.get_or_create(username=username, name=name, model=None, scope=None, value=None)
+                    creating.add(Role.objects.get_or_create(
+                        username=username, name=name, model=None, scope=None, value=None
+                    )[0].id)
+    Role.objects.filter(pk__in=existing-creating).delete()
 
 
 def m2m_save_func(sender, **kwargs):
-    if kwargs['action'] in ('pre_add', 'pre_remove'):
-        pass
-    else:
+    if kwargs['action'].startswith('post_'):
         post_save_func(type(kwargs['instance']), instance=kwargs['instance'])
 
 

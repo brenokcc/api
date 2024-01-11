@@ -203,6 +203,7 @@ def to_relation_dict(k, v):
         relation['aggregations'] = str_to_list(v['aggregations']) if 'aggregations' in v else []
         relation['name'] = v.get('name', k)
         relation['requires'] = v.get('requires')
+        relation['template'] = v.get('template')
         relation['related_field'] = v.get('related_field')
         relation['filters'] = str_to_list(v['filters']) if 'filters' in v else []
         relation['fields'] = {name: width for name, width in str_to_width_list(v.get('fields'))}
