@@ -1,3 +1,4 @@
+import sys
 from django.db import models
 from django.apps import apps
 from datetime import datetime
@@ -115,6 +116,10 @@ class Email(models.Model):
         to = [email.strip() for email in self.to.split(',')]
         msg = EmailMultiAlternatives(self.subject, strip_tags(self.content), self.from_email, to)
         msg.attach_alternative(self.content, "text/html")
-        if settings.DEBUG or 'test' in sys.argv or msg.send(fail_silently=True):
-            self.sent_at = datetime.now()
+        if self.sent_at is None:
+            if settings.DEBUG or 'test' in sys.argv:
+                self.sent_at = datetime.now()
+            else:
+                msg.send(fail_silently=True)
+                self.sent_at = datetime.now()
         super().save(*args, **kwargs)

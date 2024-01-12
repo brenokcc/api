@@ -154,7 +154,7 @@ function closeDialogs(message){
             dialog.remove();
             if(i==0){
                 $('.layer').hide();
-                if(window.reloader) window.reloader(message);
+                if(window.reloader) window.reloader();
             } else {
                 dialogs[i-1].style.display = "block";
             }
