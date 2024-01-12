@@ -117,9 +117,6 @@ class Email(models.Model):
         msg = EmailMultiAlternatives(self.subject, strip_tags(self.content), self.from_email, to)
         msg.attach_alternative(self.content, "text/html")
         if self.sent_at is None:
-            if settings.DEBUG or 'test' in sys.argv:
-                self.sent_at = datetime.now()
-            else:
-                msg.send(fail_silently=True)
-                self.sent_at = datetime.now()
+            msg.send(fail_silently=True)
+            self.sent_at = datetime.now()
         super().save(*args, **kwargs)
